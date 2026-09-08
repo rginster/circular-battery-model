@@ -1,0 +1,2667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Circular Battery Production — System Dynamics Model</title>
+<meta name="description" content="Interactive, offline system dynamics model of circular battery production (diffusion, battery market, raw materials, 2nd life, life cycle assessment).">
+<style>
+/* ============================================================
+   Design tokens
+   ============================================================ */
+:root {
+  color-scheme: light;
+  --plane:            #f9f9f7;
+  --surface-1:        #fcfcfb;
+  --surface-2:        #f4f3ef;
+  --surface-sunken:   #efeee9;
+  --text-primary:     #0b0b0b;
+  --text-secondary:   #52514e;
+  --text-muted:       #898781;
+  --grid:             #e1e0d9;
+  --axis:             #c3c2b7;
+  --border:           rgba(11, 11, 11, .10);
+  --border-strong:    rgba(11, 11, 11, .18);
+  --accent:           #2a78d6;
+  --accent-soft:      rgba(42, 120, 214, .10);
+  --good:             #006300;
+  --critical:         #d03b3b;
+
+  --s1: #2a78d6;  /* blau    — Primärmaterial / Bedarf / Neufahrzeuge */
+  --s2: #eb6834;  /* orange  — Ersatz / Ausfälle */
+  --s3: #1baf7a;  /* aqua    — Sekundärmaterial / Rückgewinnung */
+  --s4: #4a3aa7;  /* violett — Summen / Gesamtgrößen */
+  --s5: #e34948;  /* rot     — empirische Referenzdaten */
+  --ref: #898781;  /* Referenzszenario */
+
+  --shadow: 0 1px 2px rgba(11,11,11,.04), 0 4px 16px -8px rgba(11,11,11,.10);
+  --radius: 12px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --plane:          #0d0d0d;
+    --surface-1:      #1a1a19;
+    --surface-2:      #222221;
+    --surface-sunken: #131312;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,.10);
+    --border-strong:  rgba(255,255,255,.20);
+    --accent:         #3987e5;
+    --accent-soft:    rgba(57,135,229,.16);
+    --good:           #0ca30c;
+    --critical:       #e05a5a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9; --s5: #e66767;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane:          #0d0d0d;
+  --surface-1:      #1a1a19;
+  --surface-2:      #222221;
+  --surface-sunken: #131312;
+  --text-primary:   #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted:     #898781;
+  --grid:           #2c2c2a;
+  --axis:           #383835;
+  --border:         rgba(255,255,255,.10);
+  --border-strong:  rgba(255,255,255,.20);
+  --accent:         #3987e5;
+  --accent-soft:    rgba(57,135,229,.16);
+  --good:           #0ca30c;
+  --critical:       #e05a5a;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9; --s5: #e66767;
+  --shadow: none;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  background: var(--plane);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.011em; }
+p { margin: 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+.wrap { max-width: 1400px; margin: 0 auto; padding: 0 24px; }
+@media (max-width: 640px) { .wrap { padding: 0 14px; } }
+
+/* ============================================================
+   Topbar
+   ============================================================ */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.topbar-in { display: flex; align-items: center; gap: 20px; min-height: 62px; }
+.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.brand .mark {
+  width: 26px; height: 26px; flex: none; border-radius: 7px;
+  background: linear-gradient(140deg, var(--s1), var(--s3));
+  position: relative; align-self: center;
+}
+.brand .mark::after {
+  content: ""; position: absolute; inset: 7px; border-radius: 50%;
+  border: 2px solid var(--surface-1); border-right-color: transparent;
+}
+.brand h1 { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand .sub {
+  font-size: 12.5px; color: var(--text-muted); white-space: nowrap;
+  padding-left: 12px; border-left: 1px solid var(--border);
+}
+@media (max-width: 860px) { .brand .sub { display: none; } }
+.topbar nav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.navlink {
+  font-size: 13px; color: var(--text-secondary); padding: 6px 10px; border-radius: 7px;
+}
+.navlink:hover { background: var(--surface-2); text-decoration: none; color: var(--text-primary); }
+@media (max-width: 1080px) { .navlink { display: none; } }
+
+.iconbtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 34px; padding: 0 11px; font: inherit; font-size: 13px;
+  color: var(--text-secondary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.iconbtn:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.iconbtn svg { width: 15px; height: 15px; flex: none; }
+
+/* ============================================================
+   Hero / intro
+   ============================================================ */
+.hero { padding: 40px 0 28px; }
+.eyebrow {
+  font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--accent);
+}
+.hero h2 { font-size: clamp(26px, 4vw, 38px); line-height: 1.14; margin-top: 10px; max-width: 22ch; }
+.hero .lede {
+  margin-top: 14px; max-width: 68ch; font-size: 16px; color: var(--text-secondary);
+}
+.hero-meta {
+  margin-top: 22px; display: flex; flex-wrap: wrap; gap: 8px 10px;
+}
+.tag {
+  font-size: 12px; color: var(--text-secondary); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px;
+}
+
+/* ============================================================
+   Cards & sections
+   ============================================================ */
+.card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+section.block { padding: 34px 0; scroll-margin-top: 78px; }
+.block-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.block-head h3 { font-size: 20px; }
+.block-head p { font-size: 14px; color: var(--text-secondary); max-width: 74ch; }
+.block-num {
+  font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; align-self: center;
+}
+
+/* ============================================================
+   Control panel
+   ============================================================ */
+.panel { position: sticky; top: 62px; z-index: 40; padding-top: 12px; padding-bottom: 12px; background: var(--plane); }
+@media (max-width: 900px), (max-height: 760px) { .panel { position: static; } }
+.panel-card { padding: 18px 20px; }
+.panel-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.panel-label {
+  font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-muted); flex: none;
+}
+.chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.chip {
+  font: inherit; font-size: 13px; padding: 5px 12px; cursor: pointer;
+  color: var(--text-secondary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 999px; white-space: nowrap;
+}
+.chip:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.chip[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500;
+}
+.panel-sep { height: 1px; background: var(--border); margin: 16px 0; }
+.sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 26px; }
+.sl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sl-name { font-size: 13px; color: var(--text-secondary); }
+.sl-val { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sl-val small { font-weight: 400; color: var(--text-muted); font-size: 11.5px; margin-left: 3px; }
+input[type=range] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 20px;
+  background: transparent; cursor: pointer; margin: 2px 0 0;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px; background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--surface-1); margin-top: -6.5px;
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+input[type=range]::-moz-range-track {
+  height: 4px; border-radius: 2px; background: var(--surface-sunken); border: 1px solid var(--border);
+}
+input[type=range]::-moz-range-thumb {
+  width: 13px; height: 13px; border-radius: 50%; background: var(--accent);
+  border: 2px solid var(--surface-1); box-shadow: 0 0 0 1px var(--border-strong);
+}
+.panel-foot {
+  display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap;
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);
+}
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+.check input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.spacer { margin-left: auto; }
+details.adv { margin-top: 14px; }
+details.adv > summary {
+  font-size: 13px; color: var(--text-secondary); cursor: pointer; list-style: none;
+  display: inline-flex; align-items: center; gap: 7px; padding: 4px 0;
+}
+details.adv > summary::-webkit-details-marker { display: none; }
+details.adv > summary::before {
+  content: ""; width: 0; height: 0; border-left: 5px solid currentColor;
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .15s;
+}
+details.adv[open] > summary::before { transform: rotate(90deg) translateX(1px); }
+details.adv > summary:hover { color: var(--text-primary); }
+.adv-body { padding-top: 14px; }
+.numgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 22px; }
+.numrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+.numrow label { color: var(--text-secondary); }
+.numrow input, .numrow select {
+  font: inherit; font-size: 13px; width: 104px; padding: 4px 7px; text-align: right;
+  color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.numrow select { text-align: left; width: 118px; }
+
+/* ============================================================
+   KPI tiles
+   ============================================================ */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.kpi { padding: 16px 18px 15px; display: flex; flex-direction: column; gap: 3px; }
+.kpi .k-label { font-size: 12.5px; color: var(--text-secondary); }
+.kpi .k-val { font-size: 29px; font-weight: 600; line-height: 1.12; letter-spacing: -.02em; margin-top: 2px; }
+.kpi .k-unit { font-size: 12px; color: var(--text-muted); }
+.kpi .k-delta { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; margin-top: 3px; }
+.kpi .k-delta b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpi .k-delta.up   b { color: var(--critical); }
+.kpi .k-delta.down b { color: var(--good); }
+.kpi .k-spark { margin-top: auto; padding-top: 9px; height: 30px; }
+.kpi .k-spark canvas { width: 100%; height: 30px; display: block; }
+
+/* ============================================================
+   Charts
+   ============================================================ */
+.chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1000px) { .chart-grid { grid-template-columns: 1fr; } }
+.chart-card { padding: 16px 18px 14px; display: flex; flex-direction: column; min-width: 0; }
+.chart-card.wide { grid-column: 1 / -1; }
+.ch-head { display: flex; align-items: flex-start; gap: 12px; }
+.ch-titles { min-width: 0; flex: 1; }
+.ch-title { font-size: 14.5px; font-weight: 600; }
+.ch-unit { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+.ch-acts { display: flex; gap: 4px; flex: none; }
+.ch-acts button {
+  font: inherit; font-size: 11.5px; padding: 3px 8px; cursor: pointer;
+  color: var(--text-muted); background: transparent;
+  border: 1px solid transparent; border-radius: 6px;
+}
+.ch-acts button:hover { color: var(--text-primary); background: var(--surface-2); border-color: var(--border); }
+.ch-acts button[aria-pressed="true"] {
+  color: var(--text-primary); background: var(--surface-2); border-color: var(--border-strong);
+}
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 11px 0 3px; }
+.lg-item {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
+  color: var(--text-secondary); background: none; border: 0; padding: 1px 0;
+  font-family: inherit; cursor: pointer; text-align: left;
+}
+.lg-item .key { width: 14px; height: 3px; border-radius: 2px; flex: none; }
+.lg-item .key.dashed { background: none; border-top: 3px dotted var(--ref); border-radius: 0; }
+.lg-item[aria-pressed="false"] { color: var(--text-muted); opacity: .5; }
+.lg-item:hover { color: var(--text-primary); }
+.plot { position: relative; margin-top: 4px; }
+.plot canvas { display: block; width: 100%; height: 268px; touch-action: pan-y; }
+.chart-card.tall .plot canvas { height: 330px; }
+.tip {
+  position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+  min-width: 168px; max-width: 280px; padding: 9px 11px; z-index: 5;
+  background: var(--surface-1); border: 1px solid var(--border-strong);
+  border-radius: 9px; box-shadow: 0 4px 20px -6px rgba(0,0,0,.28);
+  font-size: 12px; line-height: 1.5;
+}
+.tip.on { opacity: 1; }
+.tip .t-head {
+  font-weight: 600; font-size: 12.5px; padding-bottom: 5px; margin-bottom: 5px;
+  border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums;
+}
+.tip .t-row { display: flex; align-items: center; gap: 8px; }
+.tip .t-row .key { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.tip .t-row .nm { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tip .t-row .vl { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.tbl-wrap { display: none; margin-top: 12px; max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.tbl-wrap.on { display: block; }
+table.dt { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+table.dt th, table.dt td { padding: 6px 10px; text-align: right; white-space: nowrap; }
+table.dt thead th {
+  position: sticky; top: 0; background: var(--surface-2); color: var(--text-secondary);
+  font-weight: 600; text-align: right; border-bottom: 1px solid var(--border); z-index: 1;
+}
+table.dt thead th:first-child, table.dt td:first-child { text-align: left; }
+table.dt tbody tr + tr td { border-top: 1px solid var(--grid); }
+table.dt tbody tr:hover td { background: var(--surface-2); }
+.note { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+
+/* ============================================================
+   Diagram
+   ============================================================ */
+.diagram-card { padding: 0; overflow: hidden; }
+.dg-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface-1);
+}
+.dg-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+.dg-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dg-legend i { width: 13px; height: 11px; flex: none; border: 1.5px solid var(--axis); }
+.dg-legend i.st { background: var(--accent-soft); border-radius: 2px; }
+.dg-legend i.va { background: transparent; border-radius: 50%; }
+.dg-legend i.cv { background: transparent; clip-path: polygon(22% 0, 78% 0, 100% 50%, 78% 100%, 22% 100%, 0 50%); border: 0; box-shadow: inset 0 0 0 1.5px var(--axis); }
+.dg-legend i.fl { height: 3px; background: var(--axis); border: 0; }
+.dg-body { position: relative; background: var(--surface-sunken); }
+.dg-scroll { overflow: auto; max-height: min(74vh, 760px); cursor: grab; }
+.dg-scroll.grabbing { cursor: grabbing; }
+.dg-scroll svg { display: block; }
+.dg-info {
+  position: absolute; right: 14px; bottom: 14px; width: min(330px, calc(100% - 28px));
+  padding: 13px 15px; background: var(--surface-1); border: 1px solid var(--border-strong);
+  border-radius: 10px; box-shadow: 0 6px 24px -10px rgba(0,0,0,.3); font-size: 12.5px;
+}
+.dg-info .i-kind {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.dg-info .i-name { font-size: 14px; font-weight: 600; margin: 3px 0 7px; }
+.dg-info .i-eq {
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--text-secondary);
+  background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 7px;
+  padding: 8px 10px; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+}
+.dg-info .i-unit { margin-top: 7px; font-size: 11.5px; color: var(--text-muted); }
+.dg-info .i-hint { color: var(--text-muted); }
+
+/* SVG diagram styling */
+.sv-sector { fill: var(--surface-1); stroke: var(--border-strong); stroke-width: 1; rx: 12; }
+.sv-sector-label { fill: var(--text-muted); font-size: 15px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; font-family: var(--font); }
+.sv-link { fill: none; stroke: var(--axis); stroke-width: 1.4; opacity: .55; }
+.sv-flow { fill: none; stroke: var(--text-muted); stroke-width: 5; stroke-linecap: butt; opacity: .9; }
+.sv-flowline { fill: none; stroke: var(--surface-1); stroke-width: 1.6; }
+.sv-cloud { fill: var(--surface-2); stroke: var(--axis); stroke-width: 1.4; }
+.sv-valve { fill: var(--surface-1); stroke: var(--text-muted); stroke-width: 1.6; }
+.sv-node { cursor: pointer; }
+.sv-stock { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; rx: 5; }
+.sv-var { fill: var(--surface-2); stroke: var(--axis); stroke-width: 1.4; }
+.sv-conv { fill: none; stroke: var(--s3); stroke-width: 1.6; }
+.sv-label { fill: var(--text-primary); font-size: 13px; font-family: var(--font); pointer-events: none; }
+.sv-flowlabel { fill: var(--text-secondary); font-size: 12px; font-family: var(--font); pointer-events: none; }
+.sv-node:hover .sv-var { fill: var(--accent-soft); stroke: var(--accent); }
+.sv-node:hover .sv-stock { stroke-width: 2.4; }
+.sv-node:hover .sv-conv { stroke-width: 2.6; }
+.dg-root.dim .sv-link { opacity: .1; }
+.dg-root.dim .sv-node { opacity: .34; }
+.dg-root.dim .sv-flow, .dg-root.dim .sv-valve, .dg-root.dim .sv-cloud, .dg-root.dim .sv-flowlabel { opacity: .22; }
+.dg-root .sv-link.hl { opacity: 1; stroke: var(--accent); stroke-width: 2.2; }
+.dg-root .sv-link.hl-out { stroke: var(--s2); }
+.dg-root.dim .sv-node.hl { opacity: 1; }
+.dg-root.dim .sv-node.hl-2 { opacity: .92; }
+
+/* ============================================================
+   Docs / equations
+   ============================================================ */
+.doc-card { padding: 0; overflow: hidden; }
+.doc-tabs { display: flex; gap: 2px; padding: 10px 14px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.doc-tabs button {
+  font: inherit; font-size: 13px; padding: 7px 13px; cursor: pointer; position: relative;
+  color: var(--text-secondary); background: none; border: 0; border-radius: 7px 7px 0 0;
+}
+.doc-tabs button:hover { color: var(--text-primary); background: var(--surface-2); }
+.doc-tabs button[aria-selected="true"] { color: var(--text-primary); font-weight: 600; }
+.doc-tabs button[aria-selected="true"]::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px;
+  background: var(--accent); border-radius: 2px 2px 0 0;
+}
+.doc-pane { display: none; overflow: auto; max-height: 620px; }
+.doc-pane.on { display: block; }
+table.eq { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.eq th, table.eq td { padding: 9px 14px; text-align: left; vertical-align: top; }
+table.eq thead th {
+  position: sticky; top: 0; background: var(--surface-2); color: var(--text-secondary);
+  font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  border-bottom: 1px solid var(--border); z-index: 1;
+}
+table.eq tbody tr + tr td { border-top: 1px solid var(--grid); }
+table.eq td.nm { font-weight: 500; min-width: 170px; }
+table.eq td.fx { font-family: var(--mono); font-size: 11.5px; color: var(--text-secondary); line-height: 1.6; }
+table.eq td.un { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.pill {
+  display: inline-block; font-size: 10.5px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; padding: 2px 7px; border-radius: 5px; white-space: nowrap;
+  border: 1px solid var(--border); color: var(--text-secondary); background: var(--surface-2);
+}
+.pill.stock { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: var(--accent-soft); }
+.pill.flow  { color: var(--s2); border-color: color-mix(in srgb, var(--s2) 40%, transparent); background: color-mix(in srgb, var(--s2) 10%, transparent); }
+.pill.conv  { color: var(--s3); border-color: color-mix(in srgb, var(--s3) 40%, transparent); background: color-mix(in srgb, var(--s3) 10%, transparent); }
+.prose { padding: 20px 22px; max-width: 82ch; }
+.prose h4 { font-size: 14px; margin: 20px 0 7px; }
+.prose h4:first-child { margin-top: 0; }
+.prose p { font-size: 13.5px; color: var(--text-secondary); margin-bottom: 9px; }
+.prose ul { margin: 0 0 12px; padding-left: 20px; font-size: 13.5px; color: var(--text-secondary); }
+.prose li { margin-bottom: 5px; }
+.prose code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+.callout {
+  border-left: 2px solid var(--accent); background: var(--accent-soft);
+  padding: 11px 14px; border-radius: 0 8px 8px 0; margin: 12px 0;
+  font-size: 13px; color: var(--text-secondary);
+}
+
+/* ============================================================
+   Footer
+   ============================================================ */
+footer { border-top: 1px solid var(--border); margin-top: 30px; padding: 26px 0 40px; }
+.foot-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 26px; }
+@media (max-width: 800px) { .foot-grid { grid-template-columns: 1fr; } }
+footer h5 {
+  margin: 0 0 8px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+footer p, footer li { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; }
+footer ul { margin: 0; padding: 0; list-style: none; }
+footer li + li { margin-top: 5px; }
+
+/* ============================================================
+   Print
+   ============================================================ */
+@media print {
+  :root { --shadow: none; }
+  .topbar, .panel, .ch-acts, .dg-bar, .dg-info, .iconbtn { display: none !important; }
+  body { background: #fff; }
+  .chart-grid { grid-template-columns: 1fr 1fr; }
+  .card { break-inside: avoid; }
+  .dg-scroll { max-height: none; overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <h1 data-i18n="brand.title">Circular Battery Production</h1>
+      <span class="sub" data-i18n="brand.sub">System dynamics model · 2000–2050</span>
+    </div>
+    <nav>
+      <a class="navlink" href="#controls" data-i18n="nav.controls">Controls</a>
+      <a class="navlink" href="#results" data-i18n="nav.results">Results</a>
+      <a class="navlink" href="#structure" data-i18n="nav.structure">Model structure</a>
+      <a class="navlink" href="#documentation" data-i18n="nav.docs">Documentation</a>
+      <button class="iconbtn" id="langBtn" type="button" data-i18n-aria="lang.toggle" data-i18n-title="lang.toggle"
+              aria-label="Switch language" title="Switch language">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>
+        </svg>
+        <span id="langLabel">Deutsch</span>
+      </button>
+      <button class="iconbtn" id="themeBtn" type="button" data-i18n-aria="theme.toggle" data-i18n-title="theme.toggle"
+              aria-label="Switch colour scheme" title="Switch colour scheme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4L17 7M7 17l-1.6 1.6"/>
+        </svg>
+        <span id="themeLabel">Dark</span>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- ══════════════════════════ HERO ══════════════════════════ -->
+  <div class="wrap hero">
+    <p class="eyebrow" data-i18n="hero.eyebrow">Simulation model</p>
+    <h2 data-i18n="hero.head">How much CO<sub>2</sub> does keeping batteries in the loop save?</h2>
+    <p class="lede" data-i18n="hero.lede">
+      A simplified system dynamics model of circular battery production: it links the market
+      diffusion of battery electric vehicles with the resulting battery and lithium demand, the
+      recovery of material from end-of-life batteries, their continued use in 2nd-life applications
+      and the resulting greenhouse gas balance of battery production.
+    </p>
+    <div class="hero-meta">
+      <span class="tag" data-i18n="hero.tag1">7 stocks · 8 flows · 41 variables</span>
+      <span class="tag" data-i18n="hero.tag2">Period 2000–2050</span>
+      <span class="tag" data-i18n="hero.tag3">Euler integration, Δt = 0.125 a</span>
+      <span class="tag" data-i18n="hero.tag4">5 scenarios</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ CONTROLS ══════════════════════════ -->
+  <div class="panel" id="controls">
+    <div class="wrap">
+      <div class="card panel-card">
+        <div class="panel-row">
+          <span class="panel-label" data-i18n="ctrl.scenario">Scenario</span>
+          <div class="chips" id="scenarioChips" role="group" data-i18n-aria="ctrl.scenarioAria" aria-label="Choose scenario"></div>
+        </div>
+        <div class="panel-sep"></div>
+        <div class="sliders" id="sliders"></div>
+        <div class="panel-foot">
+          <label class="check">
+            <input type="checkbox" id="refToggle" checked>
+            <span data-i18n="ctrl.refToggle">Show base scenario as reference</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="realToggle" checked>
+            <span data-i18n="ctrl.realToggle">Show empirical fleet data (DE)</span>
+          </label>
+          <span class="spacer"></span>
+          <button class="iconbtn" id="csvBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3.5v11m0 0 4-4m-4 4-4-4M4.5 18.5h15"/>
+            </svg>
+            <span data-i18n="ctrl.csv">Results as CSV</span>
+          </button>
+          <button class="iconbtn" id="resetBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 12a8 8 0 1 0 2.5-5.8M4 4v3.6h3.6"/>
+            </svg>
+            <span data-i18n="ctrl.reset">Reset</span>
+          </button>
+        </div>
+        <details class="adv">
+          <summary data-i18n="ctrl.advSummary">Further model parameters and solver settings</summary>
+          <div class="adv-body">
+            <div class="numgrid" id="advGrid"></div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ KPIs ══════════════════════════ -->
+  <section class="block wrap" id="key-figures" style="padding-top:14px">
+    <div class="block-head">
+      <span class="block-num">01</span>
+      <h3 data-i18n="b1.title">Key figures of the scenario</h3>
+      <p data-i18n="b1.desc">Results of the current parameterisation; each deviation refers to the base scenario.</p>
+    </div>
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <!-- ══════════════════════════ CHARTS ══════════════════════════ -->
+  <section class="block wrap" id="results">
+    <div class="block-head">
+      <span class="block-num">02</span>
+      <h3 data-i18n="b2.title">Simulation results</h3>
+      <p data-i18n="b2.desc">Time series 2000–2050. Hover over a chart to read off values; the arrow keys
+         step along the time axis. Every chart offers a table view.</p>
+    </div>
+    <div class="chart-grid" id="chartGrid"></div>
+  </section>
+
+  <!-- ══════════════════════════ DIAGRAM ══════════════════════════ -->
+  <section class="block wrap" id="structure">
+    <div class="block-head">
+      <span class="block-num">03</span>
+      <h3 data-i18n="b3.title">Model structure</h3>
+      <p data-i18n="b3.desc">Stock and flow diagram with all six submodels. Clicking an element shows its
+         equation and highlights all incoming and outgoing causal links.</p>
+    </div>
+    <div class="card diagram-card">
+      <div class="dg-bar">
+        <button class="iconbtn" id="dgZoomOut" type="button" data-i18n-aria="dg.zoomOut" aria-label="Zoom out">−</button>
+        <button class="iconbtn" id="dgZoomIn" type="button" data-i18n-aria="dg.zoomIn" aria-label="Zoom in">+</button>
+        <button class="iconbtn" id="dgFit" type="button"><span data-i18n="dg.fit">Fit</span></button>
+        <div class="dg-legend" aria-hidden="true">
+          <span><i class="st"></i><span data-i18n="kind.stock">Stock</span></span>
+          <span><i class="fl"></i><span data-i18n="kind.flow">Flow</span></span>
+          <span><i class="va"></i><span data-i18n="kind.var">Variable</span></span>
+          <span><i class="cv"></i><span data-i18n="kind.conv">Time series</span></span>
+        </div>
+      </div>
+      <div class="dg-body">
+        <div class="dg-scroll" id="dgScroll"></div>
+        <div class="dg-info" id="dgInfo"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ DOCS ══════════════════════════ -->
+  <section class="block wrap" id="documentation">
+    <div class="block-head">
+      <span class="block-num">04</span>
+      <h3 data-i18n="b4.title">Documentation</h3>
+      <p data-i18n="b4.desc">Complete equations, parameter values, time series and assumptions of the model.</p>
+    </div>
+    <div class="card doc-card">
+      <div class="doc-tabs" role="tablist">
+        <button role="tab" aria-selected="true"  aria-controls="pane-eq"  id="tab-eq"  data-i18n="doc.tabEq">Equations</button>
+        <button role="tab" aria-selected="false" aria-controls="pane-par" id="tab-par" data-i18n="doc.tabPar">Parameters</button>
+        <button role="tab" aria-selected="false" aria-controls="pane-ts"  id="tab-ts"  data-i18n="doc.tabTs">Time series</button>
+        <button role="tab" aria-selected="false" aria-controls="pane-me"  id="tab-me"  data-i18n="doc.tabMe">Method &amp; limitations</button>
+      </div>
+
+      <div class="doc-pane on" id="pane-eq" role="tabpanel" aria-labelledby="tab-eq"></div>
+      <div class="doc-pane"    id="pane-par" role="tabpanel" aria-labelledby="tab-par"></div>
+      <div class="doc-pane"    id="pane-ts"  role="tabpanel" aria-labelledby="tab-ts"></div>
+      <div class="doc-pane"    id="pane-me"  role="tabpanel" aria-labelledby="tab-me" data-i18n="doc.method"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-grid">
+    <div>
+      <h5 data-i18n="foot.modelH">Model</h5>
+      <p data-i18n="foot.modelP">
+        Simplified system dynamics model representing circular battery production.
+        Offline version of the Insight Maker model <em>Zirkuläre Batterieproduktion</em> by Raphael Ginster.
+      </p>
+    </div>
+    <div>
+      <h5 data-i18n="foot.fundH">Funding</h5>
+      <p data-i18n="foot.fundP">
+        Research Training Group CircularLIB, funded by the Ministry for Science and Culture of
+        Lower Saxony from the zukunft.niedersachsen programme of the Volkswagen Foundation
+        (grant number MWK|ZN3678).
+      </p>
+    </div>
+    <div>
+      <h5 data-i18n="foot.srcH">Sources</h5>
+      <ul data-i18n="foot.srcL">
+        <li>Ginster, R., Blömeke, S., Popien, J. L., Scheller, C., Cerdas, F., Herrmann, C., &amp;
+            Spengler, T. S. (2024). Circular battery production in the EU. <em>Journal of Industrial
+            Ecology</em>, 28, 1165–1182. doi:10.1111/jiec.13527</li>
+        <li>European Alternative Fuels Observatory — Vehicles and fleet, Germany.</li>
+      </ul>
+    </div>
+  </div>
+</footer>
+<script>
+const DIAGRAM={"sectors":[{"id":"246","name":"Ökobilanzierung","x":20.0,"y":490.0,"w":910.0,"h":850.0},{"id":"192","name":"2nd-Life-Anwendungen","x":1855.0,"y":130.0,"w":580.0,"h":500.0},{"id":"126","name":"Diffusionsmodell","x":20.0,"y":10.0,"w":910.0,"h":470.0},{"id":"188","name":"Batteriemarkt","x":990.0,"y":200.0,"w":835.0,"h":420.0},{"id":"189","name":"Rohstoffe","x":1135.0,"y":650.0,"w":880.0,"h":480.0},{"id":"187","name":"Fahrzeugmarkt","x":990.0,"y":10.0,"w":662.5,"h":170.0}],"nodes":[{"id":"215","k":"stock","n":"Mt CO2e durch Batterieproduktion Primärmaterial","x":490.0,"y":730.0,"w":170.0,"h":40.0,"eq":"0","u":"Mt CO2e","s":"Ökobilanzierung"},{"id":"239","k":"stock","n":"Mt CO2e durch Batterieproduktion Sekundärmaterial","x":490.0,"y":1000.0,"w":170.0,"h":40.0,"eq":"0","u":"Mt CO2e","s":"Ökobilanzierung"},{"id":"254","k":"stock","n":"Mt CO2e durch Batterieproduktion","x":490.0,"y":1150.0,"w":170.0,"h":40.0,"eq":"0","u":"Mt CO2e","s":"Ökobilanzierung"},{"id":"178","k":"stock","n":"Altbatterien in 2nd-Life-Anwendungen","x":2075.0,"y":370.0,"w":130.0,"h":70.0,"eq":"0","u":"Batterien","s":"2nd-Life-Anwendungen"},{"id":"107","k":"stock","n":"Potentielle Kunden","x":270.0,"y":350.5,"w":100.0,"h":40.0,"eq":"[Gesamtmarkt]*[Marktpotential BEV]","u":"Fahrzeuge","s":"Diffusionsmodell"},{"id":"108","k":"stock","n":"Kunden","x":640.0,"y":350.5,"w":100.0,"h":40.0,"eq":"0","u":"Fahrzeuge","s":"Diffusionsmodell"},{"id":"92","k":"stock","n":"BEV Flotte","x":1232.5,"y":120.0,"w":100.0,"h":40.0,"eq":"0","u":"Fahrzeuge","s":"Fahrzeugmarkt"},{"id":"205","k":"var","n":"Ökobilanz Primärmaterial","x":260.0,"y":630.0,"w":120.0,"h":50.0,"eq":"[Batteriekapazität] * [Batterieproduktion] * ([kg CO2e je kWh Batterie aus Primärmaterial] * (1-[Potentieller recycelter Lithiumanteil]))","u":"kg CO2e / Years","s":"Ökobilanzierung"},{"id":"208","k":"var","n":"kg CO2e je kWh Batterie aus Primärmaterial","x":100.0,"y":615.0,"w":120.0,"h":80.0,"eq":"[kg CO2e je kWh Batterie aus Primärmaterial im Zeitverlauf]","u":"kg CO2e / kWh","s":"Ökobilanzierung"},{"id":"210","k":"var","n":"kg CO2e je kWh Batterie aus Sekundärmaterial","x":100.0,"y":890.0,"w":120.0,"h":90.0,"eq":"[kg CO2e je kWh Batterie aus Sekundärmaterial im Zeitverlauf]","u":"kg CO2e / kWh","s":"Ökobilanzierung"},{"id":"233","k":"var","n":"Ökobilanz Sekundärmaterial","x":260.0,"y":910.0,"w":120.0,"h":50.0,"eq":"[Batteriekapazität] * [Batterieproduktion] * ([kg CO2e je kWh Batterie aus Sekundärmaterial]*[Potentieller recycelter Lithiumanteil])","u":"kg CO2e / Years","s":"Ökobilanzierung"},{"id":"248","k":"var","n":"Umrechnung kg CO2e in Mt CO2e","x":370.0,"y":805.0,"w":120.0,"h":50.0,"eq":"10^-9","u":"Mt CO2e / kg CO2e","s":"Ökobilanzierung"},{"id":"156","k":"var","n":"Anteil Altbatterien für 2nd-Life-Anwendungen","x":1875.0,"y":430.0,"w":160.0,"h":70.0,"eq":"1","u":"Unitless","s":"2nd-Life-Anwendungen"},{"id":"177","k":"var","n":"Lebensdauer 2nd-Life-Anwendungen","x":2235.0,"y":460.0,"w":180.0,"h":50.0,"eq":"9","u":"Years","s":"2nd-Life-Anwendungen"},{"id":"111","k":"var","n":"Gesamtmarkt","x":280.0,"y":40.0,"w":120.0,"h":50.0,"eq":"4.2e+07","u":"Fahrzeuge","s":"Diffusionsmodell"},{"id":"113","k":"var","n":"Neukunden durch Werbung","x":340.0,"y":220.0,"w":170.0,"h":80.0,"eq":"[Potentielle Kunden]*[Effektivität der Werbung]","u":"Fahrzeuge / Years","s":"Diffusionsmodell"},{"id":"116","k":"var","n":"Effektivität der Werbung","x":280.0,"y":150.0,"w":120.0,"h":50.0,"eq":"6.97464e-05","u":"1/Years","s":"Diffusionsmodell"},{"id":"118","k":"var","n":"Neukunden durch Mund-zu-Mund-Werbung","x":530.0,"y":220.0,"w":170.0,"h":80.0,"eq":"[Kontaktrate]*[Effektivität Mund-zu-Mund-Werbung]*[Potentielle Kunden]*[Kunden]/[Gesamtmarkt]","u":"Fahrzeuge / Years","s":"Diffusionsmodell"},{"id":"122","k":"var","n":"Effektivität Mund-zu-Mund-Werbung","x":700.0,"y":110.0,"w":180.0,"h":70.0,"eq":"0.0920078","u":"1/Years","s":"Diffusionsmodell"},{"id":"127","k":"var","n":"Marktpotential BEV","x":40.0,"y":345.5,"w":120.0,"h":50.0,"eq":"0.765541","u":"Unitless","s":"Diffusionsmodell"},{"id":"129","k":"var","n":"Kontaktrate","x":770.0,"y":270.0,"w":120.0,"h":50.0,"eq":"4.99251","u":"Unitless","s":"Diffusionsmodell"},{"id":"135","k":"var","n":"Markteinführung BEV","x":300.0,"y":420.0,"w":120.0,"h":50.0,"eq":"2008","u":"Years","s":"Diffusionsmodell"},{"id":"98","k":"var","n":"Batteriebedarfe Neufahrzeuge","x":1010.0,"y":340.0,"w":165.0,"h":70.0,"eq":"[Produktion BEV] * [Umrechnung Fahrzeug zu Batterie]","u":"Batterien / Years","s":"Batteriemarkt"},{"id":"100","k":"var","n":"Anteil Batterieausfälle","x":1155.0,"y":230.0,"w":120.0,"h":50.0,"eq":"0.05","u":"Batterien / (Fahrzeuge * Years)","s":"Batteriemarkt"},{"id":"101","k":"var","n":"Batterieausfälle","x":1335.0,"y":230.0,"w":120.0,"h":50.0,"eq":"[BEV Flotte]*[Anteil Batterieausfälle]","u":"Batterien / Years","s":"Batteriemarkt"},{"id":"137","k":"var","n":"Batteriebedarfe von Batterieausfällen","x":1265.0,"y":340.0,"w":170.0,"h":70.0,"eq":"[Batterieausfälle]","u":"Batterien / Years","s":"Batteriemarkt"},{"id":"139","k":"var","n":"Batterieproduktion","x":1105.0,"y":490.0,"w":220.0,"h":50.0,"eq":"[Batteriebedarfe von Batterieausfällen]+[Batteriebedarfe Neufahrzeuge]","u":"Batterien / Years","s":"Batteriemarkt"},{"id":"149","k":"var","n":"Batteriekapazität","x":1385.0,"y":550.0,"w":120.0,"h":50.0,"eq":"49","u":"kWh / Batterien","s":"Batteriemarkt"},{"id":"157","k":"var","n":"Altbatterieaufkommen","x":1555.0,"y":230.0,"w":120.0,"h":50.0,"eq":"[BEV Lebensdauerende] * [Umrechnung Fahrzeug zu Batterie]","u":"Batterien / Years","s":"Batteriemarkt"},{"id":"158","k":"var","n":"Altbatterien für das Recycling","x":1685.0,"y":340.0,"w":120.0,"h":50.0,"eq":"[Altbatterieaufkommen]*(1-[Anteil Altbatterien für 2nd-Life-Anwendungen])","u":"Batterien / Years","s":"Batteriemarkt"},{"id":"160","k":"var","n":"Gesamtaltbatterieaufkommen für das Recycling","x":1495.0,"y":390.0,"w":220.0,"h":50.0,"eq":"[Batterieausfälle]+[Altbatterien für das Recycling]+[Altbatterien aus 2nd-Life-Anwendungen]","u":"Batterien / Years","s":"Batteriemarkt"},{"id":"251","k":"var","n":"Umrechnung Fahrzeug zu Batterie","x":1160.0,"y":290.0,"w":120.0,"h":50.0,"eq":"1","u":"Batterien / Fahrzeuge","s":"Batteriemarkt"},{"id":"147","k":"var","n":"Bedarf für Lithium","x":1155.0,"y":690.0,"w":120.0,"h":50.0,"eq":"[Batterieproduktion]*[Batteriekapazität]*[Massenanteil Lithium]/[Energiedichte]","u":"kg / Years","s":"Rohstoffe"},{"id":"150","k":"var","n":"Energiedichte","x":1385.0,"y":660.0,"w":120.0,"h":50.0,"eq":"0.2","u":"kWh / kg","s":"Rohstoffe"},{"id":"151","k":"var","n":"Massenanteil Lithium","x":1385.0,"y":730.0,"w":120.0,"h":50.0,"eq":"0.02","u":"Unitless","s":"Rohstoffe"},{"id":"159","k":"var","n":"Potentieller recycelter Lithiumanteil","x":1385.0,"y":800.0,"w":120.0,"h":80.0,"eq":"IfThenElse([Bedarf für Lithium]={0 kg/years}, 0, [Recyceltes Lithium]/[Bedarf für Lithium])","u":"Unitless","s":"Rohstoffe"},{"id":"161","k":"var","n":"Recyceltes Lithium","x":1625.0,"y":690.0,"w":120.0,"h":50.0,"eq":"[Massenanteil Lithium]*[Batteriekapazität]*[Recyclingeffizienz]*[Gesamtaltbatterieaufkommen für das Recycling]/[Energiedichte]","u":"kg / Years","s":"Rohstoffe"},{"id":"165","k":"var","n":"Recyclingeffizienz","x":1755.0,"y":780.0,"w":140.0,"h":50.0,"eq":"0.4","u":"Unitless","s":"Rohstoffe"},{"id":"263","k":"var","n":"Recyceltes Lithium in kt","x":1625.0,"y":930.0,"w":120.0,"h":50.0,"eq":"[Recyceltes Lithium]*[Umrechnungsfaktor kg in kt]","u":"kt / Years","s":"Rohstoffe"},{"id":"261","k":"var","n":"Umrechnungsfaktor kg in kt","x":1385.0,"y":1060.0,"w":120.0,"h":50.0,"eq":"10^-6","u":"kt / kg","s":"Rohstoffe"},{"id":"266","k":"var","n":"Potentieller recycelter Lithiumanteil in Prozent","x":1345.0,"y":930.0,"w":200.0,"h":50.0,"eq":"[Potentieller recycelter Lithiumanteil]*100","u":"Prozent","s":"Rohstoffe"},{"id":"95","k":"var","n":"Bedarfe BEV Neukunden","x":1010.0,"y":30.0,"w":120.0,"h":50.0,"eq":"[Neukunden]","u":"Fahrzeuge / Years","s":"Fahrzeugmarkt"},{"id":"105","k":"var","n":"Lebensdauer Batterien","x":1512.5,"y":30.0,"w":120.0,"h":50.0,"eq":"10.6","u":"Years","s":"Fahrzeugmarkt"},{"id":"144","k":"var","n":"BEV Ersatzkäufe","x":1222.5,"y":30.0,"w":120.0,"h":50.0,"eq":"[BEV Lebensdauerende]","u":"Fahrzeuge / Years","s":"Fahrzeugmarkt"},{"id":"259","k":"var","n":"Bedarf für Lithium in kt","x":1155.0,"y":930.0,"w":120.0,"h":50.0,"eq":"[Bedarf für Lithium]*[Umrechnungsfaktor kg in kt]","u":"kt / Years","s":"Rohstoffe"},{"id":"242","k":"conv","n":"kg CO2e je kWh Batterie aus Primärmaterial im Zeitverlauf","x":80.0,"y":510.0,"w":160.0,"h":80.0,"eq":"2020,115; 2030,85; 2040,70; 2050,60","u":"kg CO2e / kWh","s":"Ökobilanzierung"},{"id":"243","k":"conv","n":"kg CO2e je kWh Batterie aus Sekundärmaterial im Zeitverlauf","x":80.0,"y":790.0,"w":160.0,"h":80.0,"eq":"2020,100; 2030,70; 2040,60; 2050,45","u":"kg CO2e / kWh","s":"Ökobilanzierung"},{"id":"231","k":"conv","n":"BEV Flotte Real","x":1670.0,"y":80.0,"w":120.0,"h":50.0,"eq":"2008,1300; 2009,1588; 2010,2307; 2011,4541; 2012,7114; 2013,12156; 2014,18948; 2015,25502; 2016,34022; 2017,53861; 2018,83175; 2019,136617; 2020,309083; 2021,618460; 2022,1013009; 2023,1408681; 2024,1651643; 2025,2026423","u":"Unitless","s":"Weitere"}],"flows":[{"id":"218","n":"Mt CO2e / Jahr durch Batterieproduktion Primärmaterial","src":null,"tgt":"215","sp":[150.0,750.0],"tp":[350.0,748.7],"eq":"[Ökobilanz Primärmaterial] * [Umrechnung kg CO2e in Mt CO2e]","u":"Mt CO2e / Years"},{"id":"240","n":"Mt CO2e / Jahr durch Batterieproduktion Sekundärmaterial","src":null,"tgt":"239","sp":[150.0,1020.0],"tp":[490.0,1020.0],"eq":"[Ökobilanz Sekundärmaterial]*[Umrechnung kg CO2e in Mt CO2e]","u":"Mt CO2e / Years"},{"id":"255","n":"Mt CO2e / Jahr durch Batterieproduktion","src":null,"tgt":"254","sp":[150.0,1170.0],"tp":[440.0,1169.4],"eq":"[Mt CO2e / Jahr durch Batterieproduktion Primärmaterial]+[Mt CO2e / Jahr durch Batterieproduktion Sekundärmaterial]","u":"Mt CO2e / Years"},{"id":"180","n":"Installationen von Altbatterien in 2nd-Life-Anwendungen","src":null,"tgt":"178","sp":[2135.0,190.0],"tp":[715.0,-410.0],"eq":"[Altbatterieaufkommen]*[Anteil Altbatterien für 2nd-Life-Anwendungen]","u":"Batterien / Years"},{"id":"183","n":"Altbatterien aus 2nd-Life-Anwendungen","src":"178","tgt":null,"sp":[609.5,-200.0],"tp":[2139.5,590.0],"eq":"[Altbatterien in 2nd-Life-Anwendungen]/[Lebensdauer 2nd-Life-Anwendungen]","u":"Batterien / Years"},{"id":"110","n":"Neukunden","src":"107","tgt":"108","sp":[110.0,120.0],"tp":[210.0,20.0],"eq":"Step([Markteinführung BEV], 1)*([Neukunden durch Werbung]+[Neukunden durch Mund-zu-Mund-Werbung])","u":"Fahrzeuge / Years"},{"id":"93","n":"BEV Lebensdauerende","src":"92","tgt":null,"sp":[772.5,40.0],"tp":[1562.5,140.0],"eq":"[BEV Flotte]/[Lebensdauer Batterien]","u":"Fahrzeuge / Years"},{"id":"133","n":"Produktion BEV","src":null,"tgt":"92","sp":[1032.5,140.6],"tp":[652.5,-639.4],"eq":"[Bedarfe BEV Neukunden]+[BEV Ersatzkäufe]","u":"Fahrzeuge / Years"}],"links":[["208","205"],["205","218"],["210","233"],["233","240"],["242","208"],["243","210"],["248","218"],["248","240"],["240","255"],["218","255"],["177","183"],["156","180"],["133","98"],["92","101"],["110","95"],["113","110"],["107","113"],["116","113"],["118","110"],["108","118"],["107","118"],["111","118"],["111","107"],["127","107"],["129","118"],["122","118"],["135","110"],["139","147"],["149","147"],["149","161"],["160","161"],["93","157"],["156","158"],["157","180"],["183","160"],["100","101"],["101","137"],["137","139"],["98","139"],["157","158"],["101","160"],["158","160"],["251","98"],["251","157"],["150","147"],["151","147"],["151","161"],["150","161"],["165","161"],["147","159"],["161","159"],["161","263"],["261","263"],["159","266"],["95","133"],["105","93"],["93","144"],["144","133"],["139","205"],["159","205"],["149","205"],["139","233"],["149","233"],["159","233"],["147","259"],["261","259"]]};
+</script>
+<script>
+"use strict";
+/* ==================================================================
+   Zirkuläre Batterieproduktion — eigenständige Offline-Implementierung
+   des System-Dynamics-Modells (Insight Maker) in reinem JavaScript.
+   ================================================================== */
+
+/* ------------------------------------------------------------------
+   1 · Modelldefinition
+   ------------------------------------------------------------------ */
+const T0 = 2000, T1 = 2050;
+
+/* ------------------------------------------------------------------
+   1a · Sprachen (Standard: Englisch, Umschalter auf Deutsch)
+   ------------------------------------------------------------------ */
+let LANG = 'en';
+
+const I18N = {
+en: {
+  'brand.title':'Circular Battery Production',
+  'brand.sub':'System dynamics model · 2000–2050',
+  'nav.controls':'Controls', 'nav.results':'Results',
+  'nav.structure':'Model structure', 'nav.docs':'Documentation',
+  'lang.toggle':'Switch language', 'lang.other':'Deutsch',
+  'theme.toggle':'Switch colour scheme', 'theme.dark':'Dark', 'theme.light':'Light',
+  'hero.eyebrow':'Simulation model',
+  'hero.head':'How much CO<sub>2</sub> does keeping batteries in the loop save?',
+  'hero.lede':'A simplified system dynamics model of circular battery production: it links the market diffusion of battery electric vehicles with the resulting battery and lithium demand, the recovery of material from end-of-life batteries, their continued use in 2nd-life applications and the resulting greenhouse gas balance of battery production.',
+  'hero.tag1':'7 stocks · 8 flows · 41 variables',
+  'hero.tag2':'Period 2000–2050',
+  'hero.tag3':'Euler integration, Δt = 0.125 a',
+  'hero.tag4':'5 scenarios',
+  'ctrl.scenario':'Scenario', 'ctrl.scenarioAria':'Choose scenario',
+  'ctrl.refToggle':'Show base scenario as reference',
+  'ctrl.realToggle':'Show empirical fleet data (DE)',
+  'ctrl.csv':'Results as CSV', 'ctrl.reset':'Reset',
+  'ctrl.advSummary':'Further model parameters and solver settings',
+  'b1.title':'Key figures of the scenario',
+  'b1.desc':'Results of the current parameterisation; each deviation refers to the base scenario.',
+  'b2.title':'Simulation results',
+  'b2.desc':'Time series 2000–2050. Hover over a chart to read off values; the arrow keys step along the time axis. Every chart offers a table view.',
+  'b3.title':'Model structure',
+  'b3.desc':'Stock and flow diagram with all six submodels. Clicking an element shows its equation and highlights all incoming and outgoing causal links.',
+  'b4.title':'Documentation',
+  'b4.desc':'Complete equations, parameter values, time series and assumptions of the model.',
+  'dg.zoomOut':'Zoom out', 'dg.zoomIn':'Zoom in', 'dg.fit':'Fit',
+  'dg.aria':'Stock and flow diagram of the model',
+  'kind.stock':'Stock', 'kind.flow':'Flow', 'kind.var':'Variable', 'kind.conv':'Time series',
+  'doc.tabEq':'Equations', 'doc.tabPar':'Parameters', 'doc.tabTs':'Time series',
+  'doc.tabMe':'Method &amp; limitations',
+  'chart.table':'Table', 'chart.png':'PNG',
+  'chart.legendAria':'Show and hide data series',
+  'chart.ariaSuffix':'Values in the table view.',
+  'chart.refLegend':'Reference (base scenario)',
+  'chart.refSuffix':' · reference',
+  'chart.allZero':'Zero throughout in this scenario',
+  'tbl.year':'Year',
+  'kpi.same':'matches the base scenario', 'kpi.sameShort':'as base scenario',
+  'kpi.vsBase':'vs. base scenario',
+  'adv.solver':'Integration method', 'adv.euler':'Euler (RK1)', 'adv.rk4':'Runge–Kutta 4',
+  'adv.dt':'Time step Δt (years)',
+  'info.kind':'Model structure', 'info.name':'Select an element',
+  'info.hint':'Click an element in the diagram to see its equation, unit and causal links. Drag to pan, Ctrl + scroll wheel to zoom.',
+  'info.start':'Initial value: ', 'info.points':'Data points (year, value): ',
+  'info.slider':'(slider)', 'info.value2050':'Value 2050: ', 'info.unit':'Unit: ',
+  'info.in':'Inputs: ', 'info.out':'Affects: ',
+  'doc.thType':'Type', 'doc.thElement':'Element', 'doc.thEquation':'Equation', 'doc.thUnit':'Unit',
+  'doc.startVal':'Initial value = ', 'doc.convDesc':'Time series, linearly interpolated: ',
+  'doc.thParam':'Parameter', 'doc.thCurrent':'Current', 'doc.thBase':'Base scenario', 'doc.thRange':'Range',
+  'doc.grpParams':'Adjustable parameters', 'doc.grpConsts':'Constants', 'doc.grpScenarios':'Scenarios',
+  'doc.tsHead':'Stored time series',
+  'doc.tsIntro':'Values are interpolated linearly between the data points; outside their range the value stays constant.',
+  'doc.ts1':'Emission factor primary material',
+  'doc.ts2':'Emission factor secondary material',
+  'doc.ts3':'BEV fleet Germany — comparison series',
+  'doc.source':'Source: ',
+  'csv.model':'Model', 'csv.modelName':'Circular battery production (system dynamics)',
+  'csv.scenario':'Scenario', 'csv.custom':'custom',
+  'csv.method':'Method', 'csv.step':'Time step [a]',
+  'foot.modelH':'Model',
+  'foot.modelP':'Simplified system dynamics model representing circular battery production. Offline version of the Insight Maker model <em>Zirkuläre Batterieproduktion</em> by Raphael Ginster.',
+  'foot.fundH':'Funding',
+  'foot.fundP':'Research Training Group CircularLIB, funded by the Ministry for Science and Culture of Lower Saxony from the zukunft.niedersachsen programme of the Volkswagen Foundation (grant number MWK|ZN3678).',
+  'foot.srcH':'Sources',
+  'foot.srcL':'<li>Ginster, R., Blömeke, S., Popien, J. L., Scheller, C., Cerdas, F., Herrmann, C., &amp; Spengler, T. S. (2024). Circular battery production in the EU. <em>Journal of Industrial Ecology</em>, 28, 1165–1182. doi:10.1111/jiec.13527</li><li>European Alternative Fuels Observatory — Vehicles and fleet, Germany.</li>',
+  'doc.method':`<div class="prose">
+  <h4>Model boundaries and system definition</h4>
+  <p>
+    The model considers an aggregated vehicle market with a total stock of 42 million vehicles.
+    The market penetration of battery electric vehicles (BEV) is represented by a Bass diffusion
+    model: new customers arise from advertising (external influence) and from word of mouth
+    (internal influence). The inflow is released from the year of market launch onwards.
+  </p>
+  <h4>Coupling of material flow and life cycle assessment</h4>
+  <p>
+    Battery demand results from new vehicles and from replacement demand caused by battery
+    failures. Lithium is recovered from end-of-life batteries; the ratio of recovered to required
+    quantity forms the <em>potential recycled share</em>. This share weights the specific emission
+    factors for primary and secondary material, which decline until 2050 along the stored time
+    series (decarbonisation of the upstream chains).
+  </p>
+  <div class="callout">
+    <strong>Feedback:</strong> More end-of-life batteries raise the secondary material share,
+    lower the specific emissions per kWh and therefore total emissions — but delayed by the
+    vehicle lifetime and, where 2nd-life use occurs, additionally by the lifetime of the second
+    application.
+  </div>
+  <h4>System boundary of the greenhouse gas balance (cradle-to-gate)</h4>
+  <p>
+    The balance is drawn cradle-to-gate: it covers the upstream chains of the battery materials
+    and battery production up to the factory gate of the finished battery. The use phase of the
+    vehicles, the electricity for charging, transport after production and the recycling processes
+    themselves carry no emissions in the model. The cumulative curve therefore shows the
+    cradle-to-gate emissions of all batteries produced since 2000.
+  </p>
+  <h4>Deliberate simplifications</h4>
+  <ul>
+    <li>Only lithium is tracked as a raw material; further active materials are not considered.</li>
+    <li>Recycling efficiency is a constant, technology-independent factor without any time lag in the recycling process.</li>
+    <li>2nd-life applications cause no emissions of their own and no battery demand of their own; they merely delay the return to recycling.</li>
+    <li>Replacement purchases take place entirely within the BEV market, the fleet does not shrink.</li>
+    <li>No capacity limits in production or recycling, no price or cost mechanisms.</li>
+    <li>The emission factors apply per kWh of battery capacity; changes in capacity scale emissions linearly.</li>
+  </ul>
+  <h4>Numerics</h4>
+  <p>
+    The default setting is Euler integration (RK1) with Δt = 0.125 years, matching the original
+    configuration. Fourth-order Runge–Kutta is available as an option; differences between the two
+    methods indicate numerical sensitivity, particularly in the non-linear diffusion part. Flows
+    are constrained to non-negative values and stocks do not become negative.
+  </p>
+  <h4>Data sources</h4>
+  <ul>
+    <li>Emission factors for primary and secondary material: Ginster et al. (2024),
+        <em>Journal of Industrial Ecology</em> 28, 1165–1182.</li>
+    <li>Empirical BEV fleet figures for Germany 2008–2025: European Alternative Fuels
+        Observatory (used only as a comparison series, not as a model input).</li>
+    <li>Average battery capacity oriented on current production vehicles
+        (e.g. VW ID.3 with approx. 58 kWh).</li>
+  </ul>
+  <h4>Implementation of this offline version</h4>
+  <p>
+    This file is a self-contained reimplementation of the Insight Maker model in HTML, CSS and
+    JavaScript — without external resources, libraries or network access. Structure, equations,
+    units, time series and scenarios were adopted unchanged. Added were the key figure overview,
+    the scenario comparison, the table and export views and the comparison with the empirical
+    fleet data. Unlike the original, quantities with different units are always shown in separate
+    charts with a single value axis.
+  </p>
+</div>`
+},
+de: {
+  'brand.title':'Zirkuläre Batterieproduktion',
+  'brand.sub':'System-Dynamics-Modell · 2000–2050',
+  'nav.controls':'Steuerung', 'nav.results':'Ergebnisse',
+  'nav.structure':'Modellstruktur', 'nav.docs':'Dokumentation',
+  'lang.toggle':'Sprache wechseln', 'lang.other':'English',
+  'theme.toggle':'Farbschema wechseln', 'theme.dark':'Dunkel', 'theme.light':'Hell',
+  'hero.eyebrow':'Simulationsmodell',
+  'hero.head':'Wie viel CO<sub>2</sub> spart die Kreislaufführung von Batterien?',
+  'hero.lede':'Ein vereinfachtes systemdynamisches Modell der zirkulären Batterieproduktion: Es verbindet die Marktdiffusion batterieelektrischer Fahrzeuge mit dem daraus resultierenden Batterie- und Lithiumbedarf, der Rückgewinnung aus Altbatterien, der Weiternutzung in 2nd-Life-Anwendungen und der resultierenden Treibhausgasbilanz der Batterieproduktion.',
+  'hero.tag1':'7 Bestände · 8 Flüsse · 41 Variablen',
+  'hero.tag2':'Zeitraum 2000–2050',
+  'hero.tag3':'Euler-Integration, Δt = 0,125 a',
+  'hero.tag4':'5 Szenarien',
+  'ctrl.scenario':'Szenario', 'ctrl.scenarioAria':'Szenario wählen',
+  'ctrl.refToggle':'Basisszenario als Referenz einblenden',
+  'ctrl.realToggle':'Empirische Flottendaten (DE) zeigen',
+  'ctrl.csv':'Ergebnisse als CSV', 'ctrl.reset':'Zurücksetzen',
+  'ctrl.advSummary':'Weitere Modellparameter und Solver-Einstellungen',
+  'b1.title':'Kennzahlen des Szenarios',
+  'b1.desc':'Ergebnisse der aktuellen Parametrierung; die Abweichung bezieht sich jeweils auf das Basisszenario.',
+  'b2.title':'Simulationsergebnisse',
+  'b2.desc':'Zeitreihen 2000–2050. Fahren Sie über ein Diagramm, um Werte abzulesen; mit den Pfeiltasten lässt sich die Zeitachse per Tastatur abtasten. Jedes Diagramm bietet eine Tabellenansicht.',
+  'b3.title':'Modellstruktur',
+  'b3.desc':'Bestands- und Flussdiagramm mit allen sechs Teilmodellen. Ein Klick auf ein Element zeigt seine Gleichung und hebt alle ein- und ausgehenden Wirkbeziehungen hervor.',
+  'b4.title':'Dokumentation',
+  'b4.desc':'Vollständige Gleichungen, Parameterwerte, Zeitreihen und Annahmen des Modells.',
+  'dg.zoomOut':'Verkleinern', 'dg.zoomIn':'Vergrößern', 'dg.fit':'Einpassen',
+  'dg.aria':'Bestands- und Flussdiagramm des Modells',
+  'kind.stock':'Bestand', 'kind.flow':'Fluss', 'kind.var':'Variable', 'kind.conv':'Zeitreihe',
+  'doc.tabEq':'Gleichungen', 'doc.tabPar':'Parameter', 'doc.tabTs':'Zeitreihen',
+  'doc.tabMe':'Methodik &amp; Grenzen',
+  'chart.table':'Tabelle', 'chart.png':'PNG',
+  'chart.legendAria':'Datenreihen ein- und ausblenden',
+  'chart.ariaSuffix':'Werte in der Tabellenansicht.',
+  'chart.refLegend':'Referenz (Basisszenario)',
+  'chart.refSuffix':' · Referenz',
+  'chart.allZero':'In diesem Szenario durchgehend null',
+  'tbl.year':'Jahr',
+  'kpi.same':'entspricht dem Basisszenario', 'kpi.sameShort':'wie Basisszenario',
+  'kpi.vsBase':'gegenüber Basisszenario',
+  'adv.solver':'Integrationsverfahren', 'adv.euler':'Euler (RK1)', 'adv.rk4':'Runge-Kutta 4',
+  'adv.dt':'Zeitschritt Δt (Jahre)',
+  'info.kind':'Modellstruktur', 'info.name':'Element auswählen',
+  'info.hint':'Klicken Sie ein Element im Diagramm an, um Gleichung, Einheit und Wirkbeziehungen anzuzeigen. Ziehen zum Verschieben, Strg + Mausrad zum Zoomen.',
+  'info.start':'Startwert: ', 'info.points':'Stützstellen (Jahr, Wert): ',
+  'info.slider':'(Schieberegler)', 'info.value2050':'Wert 2050: ', 'info.unit':'Einheit: ',
+  'info.in':'Eingang: ', 'info.out':'Wirkt auf: ',
+  'doc.thType':'Typ', 'doc.thElement':'Element', 'doc.thEquation':'Gleichung', 'doc.thUnit':'Einheit',
+  'doc.startVal':'Startwert = ', 'doc.convDesc':'Zeitreihe, linear interpoliert: ',
+  'doc.thParam':'Parameter', 'doc.thCurrent':'Aktuell', 'doc.thBase':'Basisszenario', 'doc.thRange':'Bereich',
+  'doc.grpParams':'Steuerbare Parameter', 'doc.grpConsts':'Konstanten', 'doc.grpScenarios':'Szenarien',
+  'doc.tsHead':'Hinterlegte Zeitreihen',
+  'doc.tsIntro':'Zwischen den Stützstellen wird linear interpoliert; außerhalb des Stützstellenbereichs bleibt der Wert konstant.',
+  'doc.ts1':'Emissionsfaktor Primärmaterial',
+  'doc.ts2':'Emissionsfaktor Sekundärmaterial',
+  'doc.ts3':'BEV-Flotte Deutschland — Vergleichsreihe',
+  'doc.source':'Quelle: ',
+  'csv.model':'Modell', 'csv.modelName':'Zirkuläre Batterieproduktion (System Dynamics)',
+  'csv.scenario':'Szenario', 'csv.custom':'benutzerdefiniert',
+  'csv.method':'Verfahren', 'csv.step':'Zeitschritt [a]',
+  'foot.modelH':'Modell',
+  'foot.modelP':'Vereinfachtes systemdynamisches Modell zur Abbildung der zirkulären Batterieproduktion. Offline-Fassung des Insight-Maker-Modells <em>Zirkuläre Batterieproduktion</em> von Raphael Ginster.',
+  'foot.fundH':'Förderung',
+  'foot.fundP':'Graduiertenkolleg CircularLIB, gefördert durch das Niedersächsische Ministerium für Wissenschaft und Kultur aus dem Programm zukunft.niedersachsen der VolkswagenStiftung (Fördernummer MWK|ZN3678).',
+  'foot.srcH':'Quellen',
+  'foot.srcL':'<li>Ginster, R., Blömeke, S., Popien, J. L., Scheller, C., Cerdas, F., Herrmann, C., &amp; Spengler, T. S. (2024). Circular battery production in the EU. <em>Journal of Industrial Ecology</em>, 28, 1165–1182. doi:10.1111/jiec.13527</li><li>European Alternative Fuels Observatory — Vehicles and fleet, Germany.</li>',
+  'doc.method':`<div class="prose">
+  <h4>Modellgrenzen und Systemabgrenzung</h4>
+  <p>
+    Das Modell betrachtet einen aggregierten Fahrzeugmarkt mit einem Gesamtbestand von
+    42 Mio. Fahrzeugen. Die Marktdurchdringung batterieelektrischer Fahrzeuge (BEV) wird
+    über ein Bass-Diffusionsmodell abgebildet: Neukunden entstehen aus Werbewirkung
+    (externer Einfluss) und Mund-zu-Mund-Werbung (interner Einfluss). Ab dem Jahr der
+    Markteinführung wird der Zufluss freigeschaltet.
+  </p>
+  <h4>Kopplung von Stoffstrom und Ökobilanz</h4>
+  <p>
+    Der Batteriebedarf ergibt sich aus Neufahrzeugen und Ersatzbedarf durch Batterieausfälle.
+    Aus Altbatterien wird Lithium zurückgewonnen; der Quotient aus rückgewonnener und
+    benötigter Menge bildet den <em>potentiellen recycelten Anteil</em>. Dieser Anteil
+    gewichtet die spezifischen Emissionsfaktoren für Primär- und Sekundärmaterial, die über
+    hinterlegte Zeitreihen bis 2050 sinken (Dekarbonisierung der Vorketten).
+  </p>
+  <div class="callout">
+    <strong>Rückkopplung:</strong> Mehr Altbatterien erhöhen den Sekundärmaterialanteil,
+    senken die spezifischen Emissionen je kWh und damit die Gesamtemissionen — allerdings
+    zeitversetzt um die Fahrzeuglebensdauer und, bei 2nd-Life-Nutzung, zusätzlich um die
+    Lebensdauer der Zweitanwendung.
+  </div>
+  <h4>Systemgrenze der Treibhausgasbilanz (cradle-to-gate)</h4>
+  <p>
+    Bilanziert wird cradle-to-gate: erfasst sind die Vorketten der Batteriematerialien und die
+    Batterieproduktion bis zum Werkstor der fertigen Batterie. Die Nutzungsphase der Fahrzeuge,
+    der Ladestrom, Transporte nach der Produktion sowie die Recyclingprozesse selbst tragen im
+    Modell keine Emissionen. Die kumulierte Kurve zeigt somit die cradle-to-gate-Emissionen
+    aller seit 2000 produzierten Batterien.
+  </p>
+  <h4>Bewusste Vereinfachungen</h4>
+  <ul>
+    <li>Nur Lithium wird als Rohstoff bilanziert; weitere Aktivmaterialien bleiben unberücksichtigt.</li>
+    <li>Die Recyclingeffizienz ist ein konstanter, technologieunabhängiger Faktor ohne Zeitverzug im Recyclingprozess.</li>
+    <li>2nd-Life-Anwendungen erzeugen keine eigenen Emissionen und keinen eigenen Batteriebedarf; sie verzögern lediglich den Rücklauf ins Recycling.</li>
+    <li>Ersatzbeschaffung erfolgt vollständig innerhalb des BEV-Marktes, die Flotte schrumpft nicht.</li>
+    <li>Keine Kapazitätsgrenzen bei Produktion oder Recycling, keine Preis- oder Kostenmechanismen.</li>
+    <li>Die Emissionsfaktoren gelten je kWh Batteriekapazität; Kapazitätsänderungen skalieren die Emissionen linear.</li>
+  </ul>
+  <h4>Numerik</h4>
+  <p>
+    Standardeinstellung ist die Euler-Integration (RK1) mit Δt = 0,125 Jahren entsprechend der
+    Originalkonfiguration. Optional steht Runge-Kutta 4. Ordnung zur Verfügung; Abweichungen
+    zwischen beiden Verfahren sind ein Indikator für numerische Sensitivität, insbesondere im
+    nichtlinearen Diffusionsteil. Flüsse sind auf nichtnegative Werte beschränkt, Bestände
+    werden nicht negativ.
+  </p>
+  <h4>Datenherkunft</h4>
+  <ul>
+    <li>Emissionsfaktoren für Primär- und Sekundärmaterial: Ginster et al. (2024),
+        <em>Journal of Industrial Ecology</em> 28, 1165–1182.</li>
+    <li>Empirische BEV-Flottenzahlen Deutschland 2008–2025: European Alternative Fuels
+        Observatory (nur als Vergleichsreihe, nicht als Modelleingang).</li>
+    <li>Durchschnittliche Batteriekapazität orientiert an aktuellen Serienfahrzeugen
+        (z. B. VW ID.3 mit ca. 58 kWh).</li>
+  </ul>
+  <h4>Umsetzung dieser Offline-Fassung</h4>
+  <p>
+    Diese Datei ist eine eigenständige Neuimplementierung des Insight-Maker-Modells in
+    HTML, CSS und JavaScript — ohne externe Ressourcen, Bibliotheken oder Netzwerkzugriffe.
+    Struktur, Gleichungen, Einheiten, Zeitreihen und Szenarien wurden unverändert
+    übernommen. Ergänzt wurden die Kennzahlenübersicht, der Szenarienvergleich, die
+    Tabellen- und Exportansichten sowie der Vergleich mit den empirischen Flottendaten.
+    Abweichend vom Original werden Größen unterschiedlicher Einheit stets in getrennten
+    Diagrammen mit einer einzigen Werteachse dargestellt.
+  </p>
+</div>`
+}
+};
+
+/** Übersetzten Text zu einem Schlüssel liefern. */
+function t(k) {
+  const d = I18N[LANG];
+  if (d && d[k] !== undefined) return d[k];
+  return I18N.en[k] !== undefined ? I18N.en[k] : k;
+}
+/** Zweisprachiges Feld ({de,en}) oder einfachen Wert auflösen. */
+function tv(v) { return (v && typeof v === 'object' && !Array.isArray(v)) ? (v[LANG] !== undefined ? v[LANG] : v.en) : v; }
+
+const LOCALE = () => (LANG === 'de' ? 'de-DE' : 'en-GB');
+
+/* Teilmodelle: interner (deutscher) Schlüssel → Anzeigename */
+const SECTOR_EN = {
+  'Diffusionsmodell':'Diffusion model',
+  'Fahrzeugmarkt':'Vehicle market',
+  'Batteriemarkt':'Battery market',
+  'Rohstoffe':'Raw materials',
+  '2nd-Life-Anwendungen':'2nd-life applications',
+  'Ökobilanzierung':'Life cycle assessment'
+};
+const secLabel = s => (LANG === 'en' && SECTOR_EN[s]) ? SECTOR_EN[s] : s;
+
+/* Modellelemente: deutscher Originalname → englischer Name */
+const NAME_EN = {
+  'Mt CO2e durch Batterieproduktion Primärmaterial':'Mt CO2e from battery production primary material',
+  'Mt CO2e durch Batterieproduktion Sekundärmaterial':'Mt CO2e from battery production secondary material',
+  'Mt CO2e durch Batterieproduktion':'Mt CO2e from battery production',
+  'Altbatterien in 2nd-Life-Anwendungen':'End-of-life batteries in 2nd-life applications',
+  'Potentielle Kunden':'Potential customers',
+  'Kunden':'Customers',
+  'BEV Flotte':'BEV fleet',
+  'Ökobilanz Primärmaterial':'LCA primary material',
+  'kg CO2e je kWh Batterie aus Primärmaterial':'kg CO2e per kWh battery from primary material',
+  'kg CO2e je kWh Batterie aus Sekundärmaterial':'kg CO2e per kWh battery from secondary material',
+  'Ökobilanz Sekundärmaterial':'LCA secondary material',
+  'Umrechnung kg CO2e in Mt CO2e':'Conversion kg CO2e to Mt CO2e',
+  'Anteil Altbatterien für 2nd-Life-Anwendungen':'Share of end-of-life batteries for 2nd-life applications',
+  'Lebensdauer 2nd-Life-Anwendungen':'Lifetime of 2nd-life applications',
+  'Gesamtmarkt':'Total market',
+  'Neukunden durch Werbung':'New customers from advertising',
+  'Effektivität der Werbung':'Advertising effectiveness',
+  'Neukunden durch Mund-zu-Mund-Werbung':'New customers from word of mouth',
+  'Effektivität Mund-zu-Mund-Werbung':'Word-of-mouth effectiveness',
+  'Marktpotential BEV':'BEV market potential',
+  'Kontaktrate':'Contact rate',
+  'Markteinführung BEV':'BEV market launch',
+  'Batteriebedarfe Neufahrzeuge':'Battery demand for new vehicles',
+  'Anteil Batterieausfälle':'Battery failure rate',
+  'Batterieausfälle':'Battery failures',
+  'Batteriebedarfe von Batterieausfällen':'Battery demand from battery failures',
+  'Batterieproduktion':'Battery production',
+  'Batteriekapazität':'Battery capacity',
+  'Altbatterieaufkommen':'End-of-life battery volume',
+  'Altbatterien für das Recycling':'End-of-life batteries for recycling',
+  'Gesamtaltbatterieaufkommen für das Recycling':'Total end-of-life battery volume for recycling',
+  'Umrechnung Fahrzeug zu Batterie':'Conversion vehicle to battery',
+  'Bedarf für Lithium':'Lithium demand',
+  'Energiedichte':'Energy density',
+  'Massenanteil Lithium':'Lithium mass fraction',
+  'Potentieller recycelter Lithiumanteil':'Potential recycled lithium share',
+  'Recyceltes Lithium':'Recycled lithium',
+  'Recyclingeffizienz':'Recycling efficiency',
+  'Recyceltes Lithium in kt':'Recycled lithium in kt',
+  'Umrechnungsfaktor kg in kt':'Conversion factor kg to kt',
+  'Potentieller recycelter Lithiumanteil in Prozent':'Potential recycled lithium share in percent',
+  'Bedarfe BEV Neukunden':'BEV demand from new customers',
+  'Lebensdauer Batterien':'Battery lifetime',
+  'BEV Ersatzkäufe':'BEV replacement purchases',
+  'Bedarf für Lithium in kt':'Lithium demand in kt',
+  'kg CO2e je kWh Batterie aus Primärmaterial im Zeitverlauf':'kg CO2e per kWh battery from primary material over time',
+  'kg CO2e je kWh Batterie aus Sekundärmaterial im Zeitverlauf':'kg CO2e per kWh battery from secondary material over time',
+  'BEV Flotte Real':'BEV fleet actual',
+  'Mt CO2e / Jahr durch Batterieproduktion Primärmaterial':'Mt CO2e per year from battery production primary material',
+  'Mt CO2e / Jahr durch Batterieproduktion Sekundärmaterial':'Mt CO2e per year from battery production secondary material',
+  'Mt CO2e / Jahr durch Batterieproduktion':'Mt CO2e per year from battery production',
+  'Installationen von Altbatterien in 2nd-Life-Anwendungen':'Installations of end-of-life batteries in 2nd-life applications',
+  'Altbatterien aus 2nd-Life-Anwendungen':'End-of-life batteries from 2nd-life applications',
+  'Neukunden':'New customers',
+  'BEV Lebensdauerende':'BEV end of life',
+  'Produktion BEV':'BEV production'
+};
+/** Name eines Modellelements in der aktiven Sprache. */
+const mName = n => (LANG === 'en' && NAME_EN[n]) ? NAME_EN[n] : n;
+
+/* Einheiten: deutsche Bestandteile übersetzen */
+const UNIT_EN = { 'Fahrzeuge':'Vehicles', 'Fahrzeug':'Vehicle', 'Batterien':'Batteries',
+                  'Batterie':'Battery', 'Prozent':'Percent', 'Jahre':'Years', 'Jahr':'Year' };
+function mUnit(u) {
+  if (!u) return u;
+  if (LANG !== 'en') return u;
+  return String(u).replace(/[A-Za-zÄÖÜäöüß]+/g, w => UNIT_EN[w] || w);
+}
+/** Gleichung übersetzen: die in eckigen Klammern referenzierten Elementnamen. */
+function mEq(eq) {
+  if (!eq || LANG !== 'en') return eq;
+  return String(eq).replace(/\[([^\]]+)\]/g, (m, n) => '[' + mName(n) + ']');
+}
+
+/* Steuerbare Parameter (Schieberegler im Original) */
+const PARAMS = [
+  { key:'capacity',      id:'149', label:{de:'Batteriekapazität',        en:'Battery capacity'},
+    unit:{de:'kWh je Batterie', en:'kWh per battery'}, min:1, max:100, step:1,    dp:0 },
+  { key:'batteryLifetime', id:'105', label:{de:'Lebensdauer Batterien',    en:'Battery lifetime'},
+    unit:{de:'Jahre', en:'years'},                     min:1, max:50,  step:0.1,  dp:1 },
+  { key:'recyclingEfficiency',    id:'165', label:{de:'Recyclingeffizienz',       en:'Recycling efficiency'},
+    unit:{de:'Anteil', en:'share'},                    min:0, max:1,   step:0.05, dp:0, pct:true },
+  { key:'share2ndLife',       id:'156', label:{de:'Altbatterien in 2nd Life', en:'End-of-life batteries to 2nd life'},
+    unit:{de:'Anteil', en:'share'},                    min:0, max:1,   step:0.05, dp:0, pct:true },
+  { key:'lifetime2ndLife',  id:'177', label:{de:'Lebensdauer 2nd Life',     en:'2nd-life lifetime'},
+    unit:{de:'Jahre', en:'years'},                     min:1, max:20,  step:1,    dp:0 }
+];
+
+/* Konstanten (im Original feste Variablen) */
+const CONSTS = [
+  { key:'totalMarket',      id:'111', label:{de:'Gesamtmarkt',                 en:'Total market'},
+    unit:{de:'Fahrzeuge', en:'vehicles'}, value:4.2e7 },
+  { key:'marketPotential',   id:'127', label:{de:'Marktpotential BEV',          en:'BEV market potential'},
+    unit:{de:'Anteil', en:'share'},       value:0.765541 },
+  { key:'adEffectiveness',       id:'116', label:{de:'Effektivität der Werbung',    en:'Advertising effectiveness'},
+    unit:'1/a',                           value:6.97464e-5 },
+  { key:'womEffectiveness',           id:'122', label:{de:'Effektivität Mund-zu-Mund',   en:'Word-of-mouth effectiveness'},
+    unit:'1/a',                           value:0.0920078 },
+  { key:'contactRate',      id:'129', label:{de:'Kontaktrate',                 en:'Contact rate'},
+    unit:'—',                             value:4.99251 },
+  { key:'marketLaunch', id:'135', label:{de:'Markteinführung BEV',         en:'BEV market launch'},
+    unit:{de:'Jahr', en:'year'},          value:2008 },
+  { key:'failureRate',  id:'100', label:{de:'Anteil Batterieausfälle',     en:'Battery failure rate'},
+    unit:'1/a',                           value:0.05 },
+  { key:'energyDensity',    id:'150', label:{de:'Energiedichte',               en:'Energy density'},
+    unit:'kWh/kg',                        value:0.2 },
+  { key:'lithiumMassFraction',   id:'151', label:{de:'Massenanteil Lithium',        en:'Lithium mass fraction'},
+    unit:{de:'Anteil', en:'share'},       value:0.02 },
+  { key:'vehicleToBattery',    id:'251', label:{de:'Umrechnung Fahrzeug/Batterie',en:'Conversion vehicle/battery'},
+    unit:{de:'Btr./Fzg.', en:'bat./veh.'},value:1 }
+];
+
+/* Zeitreihen (Converter, lineare Interpolation, außerhalb konstant) */
+const SERIES_DATA = {
+  co2Primary: { id:'242', label:{de:'kg CO₂e je kWh — Primärmaterial', en:'kg CO₂e per kWh — primary material'}, unit:'kg CO₂e/kWh',
+                pts:[[2020,115],[2030,85],[2040,70],[2050,60]] },
+  co2Secondary:{ id:'243', label:{de:'kg CO₂e je kWh — Sekundärmaterial', en:'kg CO₂e per kWh — secondary material'}, unit:'kg CO₂e/kWh',
+                pts:[[2020,100],[2030,70],[2040,60],[2050,45]] },
+  fleetActual: { id:'231', label:{de:'BEV-Flotte Deutschland (empirisch)', en:'BEV fleet Germany (empirical)'}, unit:{de:'Fahrzeuge', en:'vehicles'},
+                pts:[[2008,1300],[2009,1588],[2010,2307],[2011,4541],[2012,7114],[2013,12156],
+                     [2014,18948],[2015,25502],[2016,34022],[2017,53861],[2018,83175],[2019,136617],
+                     [2020,309083],[2021,618460],[2022,1013009],[2023,1408681],[2024,1651643],[2025,2026423]] }
+};
+
+/* Szenarien des Originalmodells */
+const SCENARIOS = [
+  { name:{de:'Basisszenario',    en:'Base scenario'},   p:{ capacity:50,  batteryLifetime:10.6, share2ndLife:0, recyclingEfficiency:0.7, lifetime2ndLife:5 } },
+  { name:{de:'Ohne Recycling',   en:'No recycling'},    p:{ capacity:50,  batteryLifetime:10.6, share2ndLife:0, recyclingEfficiency:0,   lifetime2ndLife:5 } },
+  { name:{de:'100 % 2nd Life',   en:'100 % 2nd life'},  p:{ capacity:50,  batteryLifetime:10.6, share2ndLife:1, recyclingEfficiency:0.7, lifetime2ndLife:5 } },
+  { name:{de:'Kleine Batterien', en:'Small batteries'}, p:{ capacity:25,  batteryLifetime:10.6, share2ndLife:0, recyclingEfficiency:0.7, lifetime2ndLife:5 } },
+  { name:{de:'Große Batterien',  en:'Large batteries'}, p:{ capacity:100, batteryLifetime:10.6, share2ndLife:0, recyclingEfficiency:0.7, lifetime2ndLife:5 } }
+];
+const BASE = SCENARIOS[0];
+
+/* Ergebnisgrößen: Beschriftung, Einheit, Dezimalstellen */
+const OUT = {
+  /* Bestände */
+  PK:      [{de:'Potentielle Kunden',                     en:'Potential customers'},        {de:'Fahrzeuge',en:'vehicles'}, 0],
+  K:       [{de:'Kunden',                                 en:'Customers'},                  {de:'Fahrzeuge',en:'vehicles'}, 0],
+  F:       [{de:'BEV-Flotte',                             en:'BEV fleet'},                  {de:'Fahrzeuge',en:'vehicles'}, 0],
+  S2:      [{de:'Altbatterien in 2nd-Life-Anwendungen',   en:'End-of-life batteries in 2nd-life applications'}, {de:'Batterien',en:'batteries'}, 0],
+  CO2p:    [{de:'Kumuliert — Primärmaterial',             en:'Cumulative — primary material'},   'Mt CO₂e', 1],
+  CO2s:    [{de:'Kumuliert — Sekundärmaterial',           en:'Cumulative — secondary material'}, 'Mt CO₂e', 1],
+  CO2t:    [{de:'Kumuliert — gesamt',                     en:'Cumulative — total'},              'Mt CO₂e', 1],
+  /* Diffusion */
+  advertising: [{de:'Neukunden durch Werbung',                en:'New customers from advertising'},  {de:'Fzg./a',en:'veh./a'}, 0],
+  wordOfMouth:     [{de:'Neukunden durch Mund-zu-Mund-Werbung',   en:'New customers from word of mouth'},{de:'Fzg./a',en:'veh./a'}, 0],
+  newCustomers:[{de:'Neukunden',                             en:'New customers'},                   {de:'Fzg./a',en:'veh./a'}, 0],
+  /* Fahrzeugmarkt */
+  endOfLife:[{de:'BEV Lebensdauerende',                  en:'BEV end of life'},                 {de:'Fzg./a',en:'veh./a'}, 0],
+  demandNew: [{de:'Bedarfe BEV Neukunden',                en:'BEV demand from new customers'},   {de:'Fzg./a',en:'veh./a'}, 0],
+  replacement:    [{de:'BEV Ersatzkäufe',                      en:'BEV replacement purchases'},       {de:'Fzg./a',en:'veh./a'}, 0],
+  production:[{de:'Produktion BEV',                       en:'BEV production'},                  {de:'Fzg./a',en:'veh./a'}, 0],
+  /* Batteriemarkt */
+  battNew:      [{de:'Batteriebedarfe Neufahrzeuge',      en:'Battery demand for new vehicles'}, {de:'Btr./a',en:'bat./a'}, 0],
+  battFailures:[{de:'Batterieausfälle',                  en:'Battery failures'},                {de:'Btr./a',en:'bat./a'}, 0],
+  battReplacement:   [{de:'Batteriebedarfe von Batterieausfällen', en:'Battery demand from battery failures'}, {de:'Btr./a',en:'bat./a'}, 0],
+  battProduction:     [{de:'Batterieproduktion',                en:'Battery production'},              {de:'Btr./a',en:'bat./a'}, 0],
+  eolVolume: [{de:'Altbatterieaufkommen',              en:'End-of-life battery volume'},      {de:'Btr./a',en:'bat./a'}, 0],
+  eolToRecycling: [{de:'Altbatterien für das Recycling',    en:'End-of-life batteries for recycling'}, {de:'Btr./a',en:'bat./a'}, 0],
+  eolFrom2ndLife:    [{de:'Altbatterien aus 2nd-Life-Anwendungen', en:'End-of-life batteries from 2nd-life applications'}, {de:'Btr./a',en:'bat./a'}, 0],
+  eolTotal:    [{de:'Gesamtaltbatterieaufkommen',        en:'Total end-of-life battery volume'},{de:'Btr./a',en:'bat./a'}, 0],
+  install2ndLife:   [{de:'Installationen in 2nd-Life-Anwendungen', en:'Installations in 2nd-life applications'}, {de:'Btr./a',en:'bat./a'}, 0],
+  /* Rohstoffe */
+  liDemand:   [{de:'Bedarf für Lithium',                  en:'Lithium demand'},                  'kg/a', 0],
+  liRecovered:      [{de:'Recyceltes Lithium',                  en:'Recycled lithium'},                'kg/a', 0],
+  liDemandKt: [{de:'Bedarf für Lithium',                  en:'Lithium demand'},                  'kt/a', 2],
+  liRecoveredKt:    [{de:'Recyceltes Lithium',                  en:'Recycled lithium'},                'kt/a', 2],
+  recycledShare:  [{de:'Potentieller recycelter Lithiumanteil',en:'Potential recycled lithium share'},{de:'Anteil',en:'share'}, 3],
+  recycledSharePct:[{de:'Potentieller recycelter Lithiumanteil',en:'Potential recycled lithium share'},'%', 1],
+  /* Ökobilanz */
+  co2PrimaryPerKwh:  [{de:'kg CO₂e je kWh — Primärmaterial',       en:'kg CO₂e per kWh — primary material'},   'kg/kWh', 1],
+  co2SecondaryPerKwh:  [{de:'kg CO₂e je kWh — Sekundärmaterial',     en:'kg CO₂e per kWh — secondary material'}, 'kg/kWh', 1],
+  lcaPrimary: [{de:'Ökobilanz Primärmaterial',              en:'LCA primary material'},            'kg CO₂e/a', 0],
+  lcaSecondary:  [{de:'Ökobilanz Sekundärmaterial',            en:'LCA secondary material'},          'kg CO₂e/a', 0],
+  flowP:    [{de:'Primärmaterial',                        en:'Primary material'},                'Mt CO₂e/a', 2],
+  flowS:    [{de:'Sekundärmaterial',                      en:'Secondary material'},              'Mt CO₂e/a', 2],
+  flowT:    [{de:'Gesamt',                                en:'Total'},                           'Mt CO₂e/a', 2]
+};
+const OUT_KEYS = Object.keys(OUT);
+
+/* ------------------------------------------------------------------
+   2 · Simulation
+   ------------------------------------------------------------------ */
+/** Lineare Interpolation einer Zeitreihe, außerhalb der Stützstellen konstant. */
+function interp(pts, x) {
+  if (x <= pts[0][0]) return pts[0][1];
+  const last = pts[pts.length - 1];
+  if (x >= last[0]) return last[1];
+  for (let i = 1; i < pts.length; i++) {
+    const [x1, y1] = pts[i], [x0, y0] = pts[i - 1];
+    if (x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+  }
+  return last[1];
+}
+const nn = v => (Number.isFinite(v) && v > 0) ? v : 0;   // Flüsse: nur positiv
+
+/**
+ * Alle Hilfsgrößen zum Zeitpunkt t beim Zustand y = [PK, K, F, S2, CO2p, CO2s, CO2t].
+ */
+function aux(t, y, P) {
+  const PK = y[0], K = y[1], F = y[2], S2 = y[3];
+  const a = {};
+
+  /* — Diffusionsmodell (Bass) — */
+  a.advertising   = PK * P.adEffectiveness;
+  a.wordOfMouth       = P.contactRate * P.womEffectiveness * PK * K / P.totalMarket;
+  a.newCustomers = nn((t >= P.marketLaunch ? 1 : 0) * (a.advertising + a.wordOfMouth));
+
+  /* — Fahrzeugmarkt — */
+  a.endOfLife = nn(F / P.batteryLifetime);
+  a.demandNew  = a.newCustomers;
+  a.replacement     = a.endOfLife;
+  a.production = nn(a.demandNew + a.replacement);
+
+  /* — Batteriemarkt — */
+  a.battNew       = a.production * P.vehicleToBattery;
+  a.battFailures = F * P.failureRate;
+  a.battReplacement    = a.battFailures;
+  a.battProduction      = a.battReplacement + a.battNew;
+  a.eolVolume  = a.endOfLife * P.vehicleToBattery;
+  a.eolToRecycling  = a.eolVolume * (1 - P.share2ndLife);
+  a.eolFrom2ndLife     = nn(S2 / P.lifetime2ndLife);
+  a.eolTotal     = a.battFailures + a.eolToRecycling + a.eolFrom2ndLife;
+  a.install2ndLife    = nn(a.eolVolume * P.share2ndLife);
+
+  /* — Rohstoffe — */
+  a.liDemand     = a.battProduction * P.capacity * P.lithiumMassFraction / P.energyDensity;
+  a.liRecovered        = P.lithiumMassFraction * P.capacity * P.recyclingEfficiency * a.eolTotal / P.energyDensity;
+  a.recycledShare    = a.liDemand === 0 ? 0 : a.liRecovered / a.liDemand;
+  a.liDemandKt   = a.liDemand * 1e-6;
+  a.liRecoveredKt      = a.liRecovered * 1e-6;
+  a.recycledSharePct = a.recycledShare * 100;
+
+  /* — Ökobilanzierung — */
+  a.co2PrimaryPerKwh  = interp(SERIES_DATA.co2Primary.pts, t);
+  a.co2SecondaryPerKwh  = interp(SERIES_DATA.co2Secondary.pts, t);
+  a.lcaPrimary = P.capacity * a.battProduction * (a.co2PrimaryPerKwh * (1 - a.recycledShare));
+  a.lcaSecondary  = P.capacity * a.battProduction * (a.co2SecondaryPerKwh * a.recycledShare);
+  a.flowP    = nn(a.lcaPrimary * 1e-9);
+  a.flowS    = nn(a.lcaSecondary * 1e-9);
+  a.flowT    = a.flowP + a.flowS;
+
+  /* Bestände zur Aufzeichnung */
+  a.PK = PK; a.K = K; a.F = F; a.S2 = S2;
+  a.CO2p = y[4]; a.CO2s = y[5]; a.CO2t = y[6];
+  return a;
+}
+
+/** Änderungsraten der sieben Bestände. */
+function deriv(t, y, P) {
+  const a = aux(t, y, P);
+  return [
+    -a.newCustomers,                    // Potentielle Kunden
+     a.newCustomers,                    // Kunden
+     a.production - a.endOfLife,    // BEV-Flotte
+     a.install2ndLife - a.eolFrom2ndLife,     // Altbatterien in 2nd Life
+     a.flowP, a.flowS, a.flowT       // kumulierte Emissionen
+  ];
+}
+
+/** Integration über den Simulationshorizont; liefert Zeitreihen aller Größen. */
+function simulate(P) {
+  const dt = P.dt, n = Math.round((T1 - T0) / dt);
+  let y = [P.totalMarket * P.marketPotential, 0, 0, 0, 0, 0, 0];
+  const res = { t: new Float64Array(n + 1), dt, n };
+  OUT_KEYS.forEach(k => res[k] = new Float64Array(n + 1));
+
+  for (let i = 0; i <= n; i++) {
+    const t = T0 + i * dt;
+    const a = aux(t, y, P);
+    res.t[i] = t;
+    for (let j = 0; j < OUT_KEYS.length; j++) res[OUT_KEYS[j]][i] = a[OUT_KEYS[j]];
+    if (i === n) break;
+
+    let d;
+    if (P.solver === 'rk4') {
+      const k1 = deriv(t, y, P);
+      const y2 = y.map((v, j) => v + k1[j] * dt / 2);
+      const k2 = deriv(t + dt / 2, y2, P);
+      const y3 = y.map((v, j) => v + k2[j] * dt / 2);
+      const k3 = deriv(t + dt / 2, y3, P);
+      const y4 = y.map((v, j) => v + k3[j] * dt);
+      const k4 = deriv(t + dt, y4, P);
+      d = k1.map((v, j) => (v + 2 * k2[j] + 2 * k3[j] + k4[j]) / 6);
+    } else {
+      d = deriv(t, y, P);
+    }
+    y = y.map((v, j) => v + d[j] * dt);
+    /* Nichtnegativitätsbedingungen der Bestände */
+    if (y[0] < 0) y[0] = 0;
+    if (y[1] < 0) y[1] = 0;
+    if (y[3] < 0) y[3] = 0;
+  }
+  return res;
+}
+
+/* ------------------------------------------------------------------
+   3 · Zahlformate (de-DE)
+   ------------------------------------------------------------------ */
+const nf = (dp, dpMax) => new Intl.NumberFormat(LOCALE(),
+  { minimumFractionDigits: dp, maximumFractionDigits: dpMax === undefined ? dp : dpMax });
+const NF = {};
+function fmt(v, dp = 0) {
+  if (!Number.isFinite(v)) return '—';
+  const key = LANG + 'd' + dp;
+  (NF[key] || (NF[key] = nf(dp)));
+  return NF[key].format(v);
+}
+/* Sprachabhängige Größenordnungs-Suffixe */
+const NUMSUF = { de:{ bn:' Mrd.', mn:' Mio.', k:' k' },
+                 en:{ bn:' bn',   mn:' mn',   k:' k' } };
+const suf = k => (NUMSUF[LANG] || NUMSUF.en)[k];
+/** Kompaktes Format für Achsen und Kennzahlen. */
+function fmtCompact(v, dp) {
+  if (!Number.isFinite(v)) return '—';
+  const av = Math.abs(v);
+  if (av >= 1e9) return fmt(v / 1e9, av >= 1e10 ? 1 : 2) + suf('bn');
+  if (av >= 1e6) return fmt(v / 1e6, av >= 1e7 ? 1 : 2) + suf('mn');
+  if (av >= 1e4) return fmt(v, 0);
+  if (dp !== undefined) return fmt(v, dp);
+  if (av >= 100) return fmt(v, 0);
+  if (av >= 1) return fmt(v, 1);
+  if (av === 0) return '0';
+  return fmt(v, 2);
+}
+/** Jahreszahlen: nie mit Tausenderpunkt, Dezimalstellen mit Komma. */
+function fmtYear(t) {
+  const r = Math.round(t * 1000) / 1000;
+  if (Number.isInteger(r)) return String(r);
+  return LANG === 'de' ? String(r).replace('.', ',') : String(r);
+}
+function fmtAxis(v, span) {
+  const av = Math.abs(v);
+  if (av === 0) return '0';
+  if (av >= 1e9) return fmt(v / 1e9, span < 4e9 ? 1 : 0) + suf('bn');
+  if (av >= 1e6) return fmt(v / 1e6, span < 4e6 ? 1 : 0) + suf('mn');
+  if (av >= 1e3) return fmt(v / 1e3, span < 4e3 ? 1 : 0) + suf('k');
+  if (av >= 10) return fmt(v, 0);
+  if (av >= 1) return fmt(v, span < 4 ? 1 : 0);
+  return fmt(v, span < 0.4 ? 2 : 1);
+}
+/** Glatte Achsenteilung. */
+function niceScale(min, max, target = 5) {
+  if (!(max > min)) { max = min + 1; }
+  const raw = (max - min) / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+  const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = lo; v <= hi + step * 1e-6; v += step) ticks.push(Math.abs(v) < step * 1e-9 ? 0 : v);
+  return { lo, hi, step, ticks };
+}
+const cssv = n => getComputedStyle(document.body).getPropertyValue(n).trim();
+
+/* ------------------------------------------------------------------
+   4 · Diagramm-Definitionen
+   ------------------------------------------------------------------ */
+const CHARTS = [
+  { id:'fleet', title:{de:'Bestand batterieelektrischer Fahrzeuge', en:'Stock of battery electric vehicles'},
+    unit:{de:'Fahrzeuge im Bestand', en:'vehicles in stock'},
+    note:{de:'Die empirische Reihe dient nur dem Vergleich und ist keine Modelleingangsgröße.',
+          en:'The empirical series is shown for comparison only and is not a model input.'},
+    series:[ {k:'F', label:{de:'BEV-Flotte (Modell)', en:'BEV fleet (model)'}, c:'--s1'},
+             {k:'@fleetActual', label:{de:'Deutschland (empirisch)', en:'Germany (empirical)'}, c:'--s5', marks:true, toggle:'realToggle'} ] },
+
+  { id:'sales', title:{de:'Absatz batterieelektrischer Fahrzeuge', en:'Sales of battery electric vehicles'},
+    unit:{de:'Fahrzeuge pro Jahr', en:'vehicles per year'},
+    series:[ {k:'production', label:{de:'Produktion BEV', en:'BEV production'}, c:'--s4', w:2.5},
+             {k:'demandNew',  label:{de:'Bedarfe Neukunden', en:'Demand from new customers'}, c:'--s1'},
+             {k:'replacement',     label:{de:'Ersatzkäufe', en:'Replacement purchases'}, c:'--s2'} ] },
+
+  { id:'batteries', title:{de:'Batteriebedarfe', en:'Battery demand'},
+    unit:{de:'Batterien pro Jahr', en:'batteries per year'},
+    series:[ {k:'battProduction',   label:{de:'Batterieproduktion', en:'Battery production'}, c:'--s4', w:2.5},
+             {k:'battNew',    label:{de:'für Neufahrzeuge', en:'for new vehicles'}, c:'--s1'},
+             {k:'battReplacement', label:{de:'für Batterieausfälle', en:'for battery failures'}, c:'--s2'} ] },
+
+  { id:'eol-batteries', title:{de:'Altbatterieaufkommen', en:'End-of-life battery volume'},
+    unit:{de:'Batterien pro Jahr', en:'batteries per year'},
+    series:[ {k:'eolTotal',    label:{de:'Gesamt für das Recycling', en:'Total for recycling'}, c:'--s4', w:2.5},
+             {k:'eolVolume', label:{de:'aus Fahrzeugen am Lebensende', en:'from vehicles at end of life'}, c:'--s1'},
+             {k:'battFailures',label:{de:'aus Batterieausfällen', en:'from battery failures'}, c:'--s2'},
+             {k:'eolFrom2ndLife',    label:{de:'aus 2nd-Life-Anwendungen', en:'from 2nd-life applications'}, c:'--s3'} ] },
+
+  { id:'second-life', title:{de:'Altbatterien in 2nd-Life-Anwendungen', en:'End-of-life batteries in 2nd-life applications'},
+    unit:{de:'Batterien im Bestand', en:'batteries in stock'},
+    note:{de:'Bestand der weitergenutzten Batterien; er entsteht nur bei einem Anteil größer null.',
+          en:'Stock of batteries kept in use; it only builds up for a share greater than zero.'},
+    series:[ {k:'S2', label:{de:'Bestand 2nd Life', en:'2nd-life stock'}, c:'--s3'} ] },
+
+  { id:'lithium', title:{de:'Lithiumbedarf und Rückgewinnung', en:'Lithium demand and recovery'},
+    unit:{de:'Kilotonnen Lithium pro Jahr', en:'kilotonnes of lithium per year'},
+    series:[ {k:'liDemandKt', label:{de:'Bedarf für Lithium', en:'Lithium demand'}, c:'--s1'},
+             {k:'liRecoveredKt',    label:{de:'Recyceltes Lithium', en:'Recycled lithium'}, c:'--s3'} ] },
+
+  { id:'recycled-share', title:{de:'Potentieller recycelter Lithiumanteil', en:'Potential recycled lithium share'},
+    unit:{de:'Prozent des Lithiumbedarfs', en:'per cent of lithium demand'},
+    note:{de:'Quotient aus rückgewonnenem und benötigtem Lithium — die Sekundärmaterialquote der Produktion.',
+          en:'Ratio of recovered to required lithium — the secondary material share of production.'},
+    series:[ {k:'recycledSharePct', label:{de:'Recycelter Anteil', en:'Recycled share'}, c:'--s3'} ] },
+
+  { id:'emissions', title:{de:'Treibhausgasemissionen der Batterieproduktion (cradle-to-gate)',
+                            en:'Greenhouse gas emissions of battery production (cradle-to-gate)'},
+    unit:{de:'Mt CO₂e pro Jahr', en:'Mt CO₂e per year'},
+    series:[ {k:'flowT', label:{de:'Gesamt', en:'Total'}, c:'--s4', w:2.5},
+             {k:'flowP', label:{de:'aus Primärmaterial', en:'from primary material'}, c:'--s1'},
+             {k:'flowS', label:{de:'aus Sekundärmaterial', en:'from secondary material'}, c:'--s3'} ] },
+
+  { id:'cumulative', title:{de:'Kumulierte Treibhausgasemissionen (cradle-to-gate)',
+                           en:'Cumulative greenhouse gas emissions (cradle-to-gate)'},
+    unit:{de:'Mt CO₂e seit 2000 · cradle-to-gate', en:'Mt CO₂e since 2000 · cradle-to-gate'},
+    wide:true, tall:true,
+    note:{de:'Kumulierte Bilanz der Batterieproduktion von der Rohstoffgewinnung bis zum Werkstor (cradle-to-gate) — die maßgebliche Größe für die Bewertung der Kreislaufführung.',
+          en:'Cumulative balance of battery production from raw material extraction to the factory gate (cradle-to-gate) — the decisive figure for assessing circularity.'},
+    series:[ {k:'CO2t', label:{de:'Gesamt', en:'Total'}, c:'--s4', w:2.5},
+             {k:'CO2p', label:{de:'aus Primärmaterial', en:'from primary material'}, c:'--s1'},
+             {k:'CO2s', label:{de:'aus Sekundärmaterial', en:'from secondary material'}, c:'--s3'} ] }
+];
+
+const KPIS = [
+  { label:{de:'Kumulierte Emissionen 2050 (cradle-to-gate)', en:'Cumulative emissions 2050 (cradle-to-gate)'},
+    k:'CO2t', at:'end', unit:'Mt CO₂e', dp:0, dir:'low', spark:'CO2t' },
+  { label:{de:'Emissionen im Jahr 2050 (cradle-to-gate)', en:'Emissions in 2050 (cradle-to-gate)'},
+    k:'flowT', at:'end', unit:'Mt CO₂e/a', dp:1, dir:'low', spark:'flowT' },
+  { label:{de:'Recycelter Lithiumanteil 2050', en:'Recycled lithium share 2050'},
+    k:'recycledSharePct', at:'end', unit:'%', dp:1, dir:'high', spark:'recycledSharePct' },
+  { label:{de:'BEV-Flotte 2050', en:'BEV fleet 2050'},
+    k:'F', at:'end', unit:{de:'Fahrzeuge', en:'vehicles'}, dp:0, dir:'none', spark:'F' },
+  { label:{de:'Batterieproduktion 2050', en:'Battery production 2050'},
+    k:'battProduction', at:'end', unit:{de:'Batterien/a', en:'batteries/a'}, dp:0, dir:'none', spark:'battProduction' },
+  { label:{de:'Lithiumbedarf 2050', en:'Lithium demand 2050'},
+    k:'liDemandKt', at:'end', unit:'kt/a', dp:1, dir:'low', spark:'liDemandKt' }
+];
+
+/* ------------------------------------------------------------------
+   5 · Zustand der Anwendung
+   ------------------------------------------------------------------ */
+const state = {
+  p: Object.assign({}, BASE.p),
+  c: CONSTS.reduce((o, c) => (o[c.key] = c.value, o), {}),
+  solver: 'euler',
+  dt: 0.125,
+  showRef: true,
+  showReal: true,
+  scenario: 0
+};
+function fullParams(p) {
+  return Object.assign({}, state.c, p, { solver: state.solver, dt: state.dt });
+}
+let RES = null, REF = null;
+function recompute() {
+  RES = simulate(fullParams(state.p));
+  REF = simulate(fullParams(BASE.p));
+}
+
+/* ------------------------------------------------------------------
+   6 · Diagramm-Renderer (Canvas)
+   ------------------------------------------------------------------ */
+class Chart {
+  constructor(spec) {
+    this.spec = spec;
+    this.hidden = new Set();
+    this.hover = -1;
+    this.showTable = false;
+    this.build();
+  }
+
+  build() {
+    const s = this.spec;
+    const card = document.createElement('div');
+    card.className = 'card chart-card' + (s.wide ? ' wide' : '') + (s.tall ? ' tall' : '');
+    card.innerHTML = `
+      <div class="ch-head">
+        <div class="ch-titles">
+          <div class="ch-title">${tv(s.title)}</div>
+          <div class="ch-unit">${tv(s.unit)}</div>
+        </div>
+        <div class="ch-acts">
+          <button type="button" data-a="table" aria-pressed="false">${t('chart.table')}</button>
+          <button type="button" data-a="png">${t('chart.png')}</button>
+        </div>
+      </div>
+      <div class="legend" role="group" aria-label="${t('chart.legendAria')}"></div>
+      <div class="plot">
+        <canvas tabindex="0" role="img"></canvas>
+        <div class="tip" role="status" aria-live="off"></div>
+      </div>
+      <div class="tbl-wrap"></div>
+      ${s.note ? `<p class="note">${tv(s.note)}</p>` : ''}`;
+    this.el = card;
+    this.canvas = card.querySelector('canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.tip = card.querySelector('.tip');
+    this.legendEl = card.querySelector('.legend');
+    this.tblEl = card.querySelector('.tbl-wrap');
+    this.canvas.setAttribute('aria-label', tv(s.title) + ' — ' + tv(s.unit) + '. ' + t('chart.ariaSuffix'));
+
+    this.buildLegend();
+
+    card.querySelector('[data-a="table"]').addEventListener('click', e => {
+      this.showTable = !this.showTable;
+      e.currentTarget.setAttribute('aria-pressed', String(this.showTable));
+      this.tblEl.classList.toggle('on', this.showTable);
+      if (this.showTable) this.renderTable();
+    });
+    card.querySelector('[data-a="png"]').addEventListener('click', () => this.exportPNG());
+
+    const cv = this.canvas;
+    cv.addEventListener('pointermove', e => {
+      const r = cv.getBoundingClientRect();
+      this.setHover(this.xToIndex(e.clientX - r.left), true);
+    });
+    cv.addEventListener('pointerleave', () => this.setHover(-1));
+    cv.addEventListener('keydown', e => {
+      const n = RES.n;
+      let i = this.hover < 0 ? n : this.hover;
+      const big = Math.max(1, Math.round(1 / RES.dt));
+      if (e.key === 'ArrowRight') i = Math.min(n, i + big);
+      else if (e.key === 'ArrowLeft') i = Math.max(0, i - big);
+      else if (e.key === 'Home') i = 0;
+      else if (e.key === 'End') i = n;
+      else if (e.key === 'Escape') { this.setHover(-1); return; }
+      else return;
+      e.preventDefault();
+      this.setHover(i, true);
+    });
+    return card;
+  }
+
+  /* Sichtbare Reihen (inkl. globaler Umschalter) */
+  visible() {
+    return this.spec.series.filter(sr => {
+      if (this.hidden.has(sr.k)) return false;
+      if (sr.toggle === 'realToggle' && !state.showReal) return false;
+      return true;
+    });
+  }
+
+  buildLegend() {
+    const lg = this.legendEl;
+    lg.innerHTML = '';
+    const items = this.spec.series.slice();
+    if (state.showRef) items.push({ k:'@ref', label:t('chart.refLegend'), c:'--ref', ref:true });
+    if (items.length < 2) { lg.style.display = 'none'; return; }
+    lg.style.display = '';
+    items.forEach(sr => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lg-item';
+      const on = sr.ref ? true : !this.hidden.has(sr.k);
+      b.setAttribute('aria-pressed', String(on));
+      b.innerHTML = `<span class="key${sr.ref ? ' dashed' : ''}" style="${sr.ref ? '' : 'background:var(' + sr.c + ')'}"></span>${tv(sr.label)}`;
+      if (!sr.ref) b.addEventListener('click', () => {
+        if (this.hidden.has(sr.k)) this.hidden.delete(sr.k);
+        else if (this.visible().length > 1) this.hidden.add(sr.k);
+        this.buildLegend(); this.draw(); if (this.showTable) this.renderTable();
+      });
+      else b.disabled = true;
+      lg.appendChild(b);
+    });
+  }
+
+  /* ---- Geometrie ---- */
+  layout() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    if (this.canvas.width !== Math.round(w * dpr) || this.canvas.height !== Math.round(h * dpr)) {
+      this.canvas.width = Math.round(w * dpr);
+      this.canvas.height = Math.round(h * dpr);
+    }
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w, h };
+  }
+
+  /* Datenzugriff: Modellreihe oder eingebettete Punktreihe */
+  valuesOf(sr) {
+    if (sr.k[0] === '@') {
+      const src = SERIES_DATA[sr.k.slice(1)];
+      return { pts: src.pts };
+    }
+    return { arr: RES[sr.k] };
+  }
+
+  extent() {
+    let max = 0, min = 0;
+    this.visible().forEach(sr => {
+      const v = this.valuesOf(sr);
+      if (v.arr) { for (let i = 0; i < v.arr.length; i++) { if (v.arr[i] > max) max = v.arr[i]; if (v.arr[i] < min) min = v.arr[i]; } }
+      else v.pts.forEach(p => { if (p[1] > max) max = p[1]; if (p[1] < min) min = p[1]; });
+    });
+    if (state.showRef) {
+      this.visible().forEach(sr => {
+        if (sr.k[0] === '@') return;
+        const a = REF[sr.k];
+        for (let i = 0; i < a.length; i++) { if (a[i] > max) max = a[i]; if (a[i] < min) min = a[i]; }
+      });
+    }
+    this.allZero = (max === 0 && min === 0);
+    if (this.allZero) max = 1;
+    return niceScale(Math.min(0, min), max, this.spec.tall ? 6 : 5);
+  }
+
+  xToIndex(px) {
+    const g = this.geo;
+    if (!g) return -1;
+    const f = (px - g.l) / g.pw;
+    if (f < -0.03 || f > 1.03) return -1;
+    return Math.max(0, Math.min(RES.n, Math.round(f * RES.n)));
+  }
+
+  setHover(i, showTip) {
+    if (i === this.hover) return;
+    this.hover = i;
+    this.draw();
+    if (i >= 0 && showTip) this.showTip(i); else this.tip.classList.remove('on');
+  }
+
+  showTip(i) {
+    const g = this.geo, year = RES.t[i];
+    const rows = this.visible().map(sr => {
+      let v;
+      if (sr.k[0] === '@') {
+        const pts = SERIES_DATA[sr.k.slice(1)].pts;
+        v = (year < pts[0][0] - .001 || year > pts[pts.length - 1][0] + .001) ? NaN : interp(pts, year);
+      } else v = RES[sr.k][i];
+      return { sr, v };
+    }).filter(r => Number.isFinite(r.v));
+    if (state.showRef) {
+      this.visible().forEach(sr => {
+        if (sr.k[0] === '@') return;
+        rows.push({ sr: { k: sr.k, label: tv(sr.label) + t('chart.refSuffix'), c: '--ref' }, v: REF[sr.k][i], ref: true });
+      });
+    }
+    rows.sort((a, b) => b.v - a.v);
+    this.tip.innerHTML = `<div class="t-head">${fmtYear(year)}</div>` +
+      rows.map(r => {
+        const dp = (OUT[r.sr.k] || [, , undefined])[2];
+        return `<div class="t-row"><span class="key" style="background:var(${r.sr.c});${r.ref ? 'opacity:.6' : ''}"></span>` +
+          `<span class="nm">${tv(r.sr.label)}</span><span class="vl">${fmtCompact(r.v, dp)}</span></div>`;
+      }).join('');
+    this.tip.classList.add('on');
+    const px = g.l + (i / RES.n) * g.pw, tw = this.tip.offsetWidth, cw = this.canvas.clientWidth;
+    let left = px + 16;
+    if (left + tw > cw - 2) left = px - tw - 16;
+    if (left < 2) left = 2;
+    this.tip.style.left = left + 'px';
+    this.tip.style.top = Math.max(2, g.t + 4) + 'px';
+  }
+
+  /* ---- Zeichnen ---- */
+  draw() {
+    if (!RES) return;
+    const { w, h } = this.layout();
+    const c = this.ctx;
+    const sec = cssv('--text-secondary'), muted = cssv('--text-muted');
+    const grid = cssv('--grid'), axis = cssv('--axis'), surf = cssv('--surface-1');
+
+    c.clearRect(0, 0, w, h);
+    c.fillStyle = surf; c.fillRect(0, 0, w, h);
+    c.font = '11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+    const sc = this.extent();
+    const labels = sc.ticks.map(v => fmtAxis(v, sc.hi - sc.lo));
+    let lw = 0; labels.forEach(s => lw = Math.max(lw, c.measureText(s).width));
+
+    /* Endbeschriftungen vorbereiten (Platzbedarf rechts) */
+    const vis = this.visible();
+    const ends = [];
+    vis.forEach(sr => {
+      let v, x = 1;
+      if (sr.k[0] === '@') {
+        const pts = SERIES_DATA[sr.k.slice(1)].pts, last = pts[pts.length - 1];
+        v = last[1]; x = (last[0] - T0) / (T1 - T0);
+      } else v = RES[sr.k][RES.n];
+      if (Number.isFinite(v)) ends.push({ sr, v, x, txt: fmtCompact(v, (OUT[sr.k] || [,,undefined])[2]) });
+    });
+    let ew = 0; ends.forEach(e => ew = Math.max(ew, c.measureText(e.txt).width));
+
+    const l = Math.ceil(lw) + 14, r = Math.min(Math.ceil(ew) + 22, Math.max(30, w * 0.24)), tp = 14, bt = 26;
+    const pw = Math.max(10, w - l - r), ph = Math.max(10, h - tp - bt);
+    this.geo = { l, r, t: tp, b: bt, pw, ph, sc };
+    const X = f => l + f * pw;
+    const Y = v => tp + ph - ((v - sc.lo) / (sc.hi - sc.lo)) * ph;
+    const xOf = year => X((year - T0) / (T1 - T0));
+
+    /* Gitter */
+    c.lineWidth = 1;
+    c.strokeStyle = grid;
+    sc.ticks.forEach(v => {
+      const y = Math.round(Y(v)) + .5;
+      c.beginPath(); c.moveTo(l, y); c.lineTo(l + pw, y); c.stroke();
+    });
+    for (let yr = T0 + 10; yr < T1; yr += 10) {
+      const x = Math.round(xOf(yr)) + .5;
+      c.beginPath(); c.moveTo(x, tp); c.lineTo(x, tp + ph); c.stroke();
+    }
+    /* Achsen */
+    c.strokeStyle = axis;
+    const y0 = Math.round(Y(Math.max(sc.lo, 0))) + .5;
+    c.beginPath(); c.moveTo(l, y0); c.lineTo(l + pw, y0); c.stroke();
+
+    /* Achsenbeschriftung */
+    c.fillStyle = muted;
+    c.textAlign = 'right'; c.textBaseline = 'middle';
+    sc.ticks.forEach((v, i) => c.fillText(labels[i], l - 8, Y(v)));
+    c.textAlign = 'center'; c.textBaseline = 'top';
+    for (let yr = T0; yr <= T1; yr += 10) c.fillText(String(yr), xOf(yr), tp + ph + 8);
+
+    /* Referenzszenario */
+    if (state.showRef) {
+      c.strokeStyle = cssv('--ref'); c.lineWidth = 1.5; c.globalAlpha = .85;
+      c.setLineDash([2, 3]);
+      vis.forEach(sr => {
+        if (sr.k[0] === '@') return;
+        this.stroke(c, REF[sr.k], X, Y);
+      });
+      c.setLineDash([]); c.globalAlpha = 1;
+    }
+
+    /* Datenreihen */
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    vis.forEach(sr => {
+      c.strokeStyle = cssv(sr.c);
+      c.lineWidth = sr.w || 2;
+      if (sr.k[0] === '@') {
+        const pts = SERIES_DATA[sr.k.slice(1)].pts;
+        c.beginPath();
+        pts.forEach((p, i) => { const x = xOf(p[0]), y = Y(p[1]); i ? c.lineTo(x, y) : c.moveTo(x, y); });
+        c.stroke();
+        if (sr.marks) pts.forEach(p => this.dot(c, xOf(p[0]), Y(p[1]), cssv(sr.c), surf, 3.2));
+      } else {
+        this.stroke(c, RES[sr.k], X, Y);
+      }
+    });
+
+    /* Endpunkte + selektive Direktbeschriftung */
+    ends.sort((a, b) => Y(a.v) - Y(b.v));
+    let lastY = -1e9;
+    ends.forEach(e => {
+      const x = X(e.x), y = Y(e.v);
+      this.dot(c, x, y, cssv(e.sr.c), surf, 4);
+      if (e.x > 0.98 && y - lastY > 13 && x + 8 + c.measureText(e.txt).width < w - 2) {
+        c.fillStyle = sec; c.textAlign = 'left'; c.textBaseline = 'middle';
+        c.fillText(e.txt, x + 9, y);
+        lastY = y;
+      }
+    });
+
+    /* Hinweis, wenn im aktuellen Szenario alle Werte null sind */
+    if (this.allZero) {
+      c.fillStyle = muted; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = '12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+      c.fillText(t('chart.allZero'), l + pw / 2, tp + ph / 2);
+      c.font = '11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    }
+
+    /* Fadenkreuz */
+    if (this.hover >= 0) {
+      const x = Math.round(X(this.hover / RES.n)) + .5;
+      c.strokeStyle = axis; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(x, tp); c.lineTo(x, tp + ph); c.stroke();
+      vis.forEach(sr => {
+        let v;
+        if (sr.k[0] === '@') {
+          const pts = SERIES_DATA[sr.k.slice(1)].pts, t = RES.t[this.hover];
+          if (t < pts[0][0] - .001 || t > pts[pts.length - 1][0] + .001) return;
+          v = interp(pts, t);
+        } else v = RES[sr.k][this.hover];
+        if (Number.isFinite(v)) this.dot(c, X(this.hover / RES.n), Y(v), cssv(sr.c), surf, 4);
+      });
+    }
+  }
+
+  stroke(c, arr, X, Y) {
+    c.beginPath();
+    const n = arr.length - 1;
+    let started = false;
+    for (let i = 0; i <= n; i++) {
+      const v = arr[i];
+      if (!Number.isFinite(v)) { started = false; continue; }
+      const x = X(i / n), y = Y(v);
+      if (started) c.lineTo(x, y); else { c.moveTo(x, y); started = true; }
+    }
+    c.stroke();
+  }
+
+  /** Punkt mit 2 px Ring in Flächenfarbe. */
+  dot(c, x, y, color, surf, r) {
+    c.beginPath(); c.arc(x, y, r + 1.6, 0, 6.2832);
+    c.fillStyle = surf; c.fill();
+    c.beginPath(); c.arc(x, y, r, 0, 6.2832);
+    c.fillStyle = color; c.fill();
+  }
+
+  renderTable() {
+    const step = Math.max(1, Math.round(5 / RES.dt));
+    const vis = this.visible();
+    const head = [t('tbl.year')].concat(vis.map(s => tv(s.label)));
+    if (state.showRef) vis.forEach(s => { if (s.k[0] !== '@') head.push(tv(s.label) + t('chart.refSuffix')); });
+    let html = '<table class="dt"><thead><tr>' + head.map(h => `<th scope="col">${h}</th>`).join('') + '</tr></thead><tbody>';
+    for (let i = 0; i <= RES.n; i += step) {
+      const t = RES.t[i];
+      html += `<tr><th scope="row" style="text-align:left;font-weight:500">${fmtYear(t)}</th>`;
+      vis.forEach(sr => {
+        let v;
+        if (sr.k[0] === '@') {
+          const pts = SERIES_DATA[sr.k.slice(1)].pts;
+          v = (t < pts[0][0] - .001 || t > pts[pts.length - 1][0] + .001) ? NaN : interp(pts, t);
+        } else v = RES[sr.k][i];
+        html += `<td>${Number.isFinite(v) ? fmtCompact(v, (OUT[sr.k] || [,,undefined])[2]) : '—'}</td>`;
+      });
+      if (state.showRef) vis.forEach(sr => {
+        if (sr.k[0] === '@') return;
+        html += `<td style="color:var(--text-muted)">${fmtCompact(REF[sr.k][i], (OUT[sr.k] || [,,undefined])[2])}</td>`;
+      });
+      html += '</tr>';
+    }
+    this.tblEl.innerHTML = html + '</tbody></table>';
+  }
+
+  exportPNG() {
+    const scale = 2, w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    const off = document.createElement('canvas');
+    off.width = w * scale; off.height = (h + 34) * scale;
+    const o = off.getContext('2d');
+    o.setTransform(scale, 0, 0, scale, 0, 0);
+    o.fillStyle = cssv('--surface-1'); o.fillRect(0, 0, w, h + 34);
+    o.fillStyle = cssv('--text-primary');
+    o.font = '600 13px system-ui, -apple-system, sans-serif';
+    o.fillText(tv(this.spec.title), 2, 14);
+    o.fillStyle = cssv('--text-muted');
+    o.font = '11px system-ui, -apple-system, sans-serif';
+    o.fillText(tv(this.spec.unit), 2, 29);
+    o.drawImage(this.canvas, 0, 34, w, h);
+    off.toBlob(b => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'battery-model-' + this.spec.id + '.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    });
+  }
+}
+
+/* ------------------------------------------------------------------
+   7 · Oberfläche aufbauen
+   ------------------------------------------------------------------ */
+const charts = [];
+function buildCharts() {
+  const grid = document.getElementById('chartGrid');
+  grid.innerHTML = '';
+  charts.length = 0;
+  CHARTS.forEach(spec => { const ch = new Chart(spec); charts.push(ch); grid.appendChild(ch.el); });
+}
+
+function buildSliders() {
+  const host = document.getElementById('sliders');
+  host.innerHTML = '';
+  PARAMS.forEach(p => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="sl-head">
+        <label class="sl-name" for="sl-${p.key}">${tv(p.label)}</label>
+        <span class="sl-val" id="slv-${p.key}"></span>
+      </div>
+      <input type="range" id="sl-${p.key}" min="${p.min}" max="${p.max}" step="${p.step}"
+             aria-describedby="slv-${p.key}">`;
+    const inp = wrap.querySelector('input');
+    inp.value = state.p[p.key];
+    inp.addEventListener('input', () => {
+      state.p[p.key] = parseFloat(inp.value);
+      state.scenario = matchScenario();
+      syncScenarioChips();
+      updateParamLabel(p);
+      refresh();
+    });
+    host.appendChild(wrap);
+    updateParamLabel(p);
+  });
+}
+function updateParamLabel(p) {
+  const el = document.getElementById('slv-' + p.key);
+  const v = state.p[p.key];
+  el.innerHTML = p.pct
+    ? fmt(v * 100, 0) + ' <small>%</small>'
+    : fmt(v, p.dp) + ' <small>' + tv(p.unit) + '</small>';
+}
+function syncSliders() {
+  PARAMS.forEach(p => {
+    const inp = document.getElementById('sl-' + p.key);
+    if (inp) inp.value = state.p[p.key];
+    updateParamLabel(p);
+  });
+}
+function matchScenario() {
+  for (let i = 0; i < SCENARIOS.length; i++) {
+    if (PARAMS.every(p => Math.abs(SCENARIOS[i].p[p.key] - state.p[p.key]) < 1e-9)) return i;
+  }
+  return -1;
+}
+function syncScenarioChips() {
+  document.querySelectorAll('#scenarioChips .chip').forEach((b, i) =>
+    b.setAttribute('aria-pressed', String(i === state.scenario)));
+}
+function buildScenarios() {
+  const host = document.getElementById('scenarioChips');
+  host.innerHTML = '';
+  SCENARIOS.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = tv(s.name);
+    b.setAttribute('aria-pressed', String(i === state.scenario));
+    b.addEventListener('click', () => {
+      state.p = Object.assign({}, s.p);
+      state.scenario = i;
+      syncScenarioChips(); syncSliders(); refresh();
+    });
+    host.appendChild(b);
+  });
+}
+
+function buildAdvanced() {
+  const host = document.getElementById('advGrid');
+  host.innerHTML = '';
+  CONSTS.forEach(cst => {
+    const row = document.createElement('div');
+    row.className = 'numrow';
+    row.innerHTML = `<label for="cs-${cst.key}">${tv(cst.label)} <span style="color:var(--text-muted)">(${tv(cst.unit)})</span></label>
+                     <input type="number" id="cs-${cst.key}" step="any" value="${state.c[cst.key]}">`;
+    const inp = row.querySelector('input');
+    inp.addEventListener('change', () => {
+      const v = parseFloat(inp.value);
+      if (Number.isFinite(v)) { state.c[cst.key] = v; refresh(); }
+      else inp.value = state.c[cst.key];
+    });
+    host.appendChild(row);
+  });
+  const solverRow = document.createElement('div');
+  solverRow.className = 'numrow';
+  solverRow.innerHTML = `<label for="cs-solver">${t('adv.solver')}</label>
+    <select id="cs-solver"><option value="euler">${t('adv.euler')}</option><option value="rk4">${t('adv.rk4')}</option></select>`;
+  const solverSel = solverRow.querySelector('select');
+  solverSel.value = state.solver;
+  solverSel.addEventListener('change', e => { state.solver = e.target.value; refresh(); });
+  host.appendChild(solverRow);
+
+  const dtRow = document.createElement('div');
+  dtRow.className = 'numrow';
+  dtRow.innerHTML = `<label for="cs-dt">${t('adv.dt')}</label>
+    <select id="cs-dt">
+      ${[0.25, 0.125, 0.0625, 0.03125].map(v =>
+        `<option value="${v}">${nf(2, 5).format(v)}</option>`).join('')}
+    </select>`;
+  const dtSel = dtRow.querySelector('select');
+  dtSel.value = String(state.dt);
+  dtSel.addEventListener('change', e => {
+    state.dt = parseFloat(e.target.value);
+    charts.forEach(ch => ch.hover = -1);
+    refresh();
+  });
+  host.appendChild(dtRow);
+}
+
+function buildKpis() {
+  const host = document.getElementById('kpis');
+  host.innerHTML = '';
+  KPIS.forEach(k => {
+    const el = document.createElement('div');
+    el.className = 'card kpi';
+    el.innerHTML = `<span class="k-label">${tv(k.label)}</span>
+      <span class="k-val">—</span>
+      <span class="k-unit">${tv(k.unit)}</span>
+      <span class="k-delta"></span>
+      <span class="k-spark"><canvas aria-hidden="true"></canvas></span>`;
+    k._val = el.querySelector('.k-val');
+    k._delta = el.querySelector('.k-delta');
+    k._cv = el.querySelector('canvas');
+    host.appendChild(el);
+  });
+}
+function updateKpis() {
+  KPIS.forEach(k => {
+    const arr = RES[k.k], ref = REF[k.k];
+    const v = arr[arr.length - 1], rv = ref[ref.length - 1];
+    k._val.textContent = fmtCompact(v, k.dp);
+    const diff = v - rv;
+    const rel = rv !== 0 ? diff / Math.abs(rv) * 100 : NaN;
+    if (Math.abs(rel) < 0.05 || !Number.isFinite(rel)) {
+      k._delta.className = 'k-delta';
+      k._delta.innerHTML = state.scenario === 0 ? t('kpi.same') : t('kpi.sameShort');
+    } else {
+      const up = diff > 0;
+      const bad = (k.dir === 'low' && up) || (k.dir === 'high' && !up);
+      const good = (k.dir === 'low' && !up) || (k.dir === 'high' && up);
+      k._delta.className = 'k-delta' + (k.dir === 'none' ? '' : bad ? ' up' : good ? ' down' : '');
+      k._delta.innerHTML = `<b>${up ? '+' : '−'}${fmt(Math.abs(rel), 1)} %</b> ${t('kpi.vsBase')}`;
+    }
+    drawSpark(k._cv, arr);
+  });
+}
+function drawSpark(cv, arr) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const w = cv.clientWidth || 180, h = 30;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const c = cv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  let max = 0; for (let i = 0; i < arr.length; i++) if (arr[i] > max) max = arr[i];
+  if (max <= 0) max = 1;
+  const n = arr.length - 1, pad = 3;
+  const X = i => (i / n) * (w - 6) + 3, Y = v => h - pad - (v / max) * (h - 2 * pad);
+  c.beginPath();
+  for (let i = 0; i <= n; i++) { const x = X(i), y = Y(arr[i]); i ? c.lineTo(x, y) : c.moveTo(x, y); }
+  c.lineTo(X(n), h - pad + 1); c.lineTo(X(0), h - pad + 1); c.closePath();
+  c.fillStyle = cssv('--accent-soft'); c.fill();
+  c.beginPath();
+  for (let i = 0; i <= n; i++) { const x = X(i), y = Y(arr[i]); i ? c.lineTo(x, y) : c.moveTo(x, y); }
+  c.strokeStyle = cssv('--accent'); c.lineWidth = 1.5; c.lineJoin = 'round'; c.stroke();
+  c.beginPath(); c.arc(X(n), Y(arr[n]), 2.6, 0, 6.2832);
+  c.fillStyle = cssv('--accent'); c.fill();
+}
+
+function refresh() {
+  recompute();
+  updateKpis();
+  charts.forEach(ch => { ch.draw(); if (ch.showTable) ch.renderTable(); });
+  updateDiagramValues();
+  updateDocValues();
+}
+
+/* ------------------------------------------------------------------
+   8 · CSV-Export
+   ------------------------------------------------------------------ */
+function exportCSV() {
+  const keys = OUT_KEYS;
+  const SEP = LANG === 'de' ? ';' : ',';
+  const num = v => LANG === 'de' ? String(v).replace('.', ',') : String(v);
+  const head = [t('tbl.year')].concat(keys.map(k => `${tv(OUT[k][0])} [${tv(OUT[k][1])}]`));
+  const lines = [head.join(SEP)];
+  for (let i = 0; i <= RES.n; i++) {
+    const row = [num(RES.t[i].toFixed(4))];
+    keys.forEach(k => row.push(num(RES[k][i].toPrecision(10).replace(/(\.\d*?)0+(e|$)/, '$1$2').replace(/\.(e|$)/, '$1'))));
+    lines.push(row.join(SEP));
+  }
+  const meta = [
+    t('csv.model') + SEP + t('csv.modelName'),
+    t('csv.scenario') + SEP + (state.scenario >= 0 ? tv(SCENARIOS[state.scenario].name) : t('csv.custom')),
+    ...PARAMS.map(p => `${tv(p.label)} [${tv(p.unit)}]${SEP}` + num(state.p[p.key])),
+    ...CONSTS.map(c => `${tv(c.label)} [${tv(c.unit)}]${SEP}` + num(state.c[c.key])),
+    t('csv.method') + SEP + (state.solver === 'rk4' ? t('adv.rk4') : t('adv.euler')),
+    t('csv.step') + SEP + num(state.dt), ''
+  ];
+  const blob = new Blob(['\ufeff' + meta.join('\n') + '\n' + lines.join('\n')],
+    { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'battery-model-results.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ------------------------------------------------------------------
+   9 · Bestands- und Flussdiagramm (SVG, aus den Originalkoordinaten)
+   ------------------------------------------------------------------ */
+const SECTOR_ORDER = ['Diffusionsmodell', 'Fahrzeugmarkt', 'Batteriemarkt', 'Rohstoffe',
+                      '2nd-Life-Anwendungen', 'Ökobilanzierung'];
+/* Elemente ohne eindeutiges Teilmodell */
+const SECTOR_FIX = { '231': 'Fahrzeugmarkt' };
+/* Teilmodelle vertikal auseinanderziehen — im Original stoßen die Rahmen aneinander */
+const SECTOR_DY = { 'Ökobilanzierung': 60, 'Batteriemarkt': 30, 'Rohstoffe': 70 };
+const kindLabel = k => t('kind.' + k);
+/* Zuordnung Modellelement → Ergebnisgröße */
+const ID2KEY = {
+  '107':'PK','108':'K','92':'F','178':'S2','215':'CO2p','239':'CO2s','254':'CO2t',
+  '113':'advertising','118':'wordOfMouth','110':'newCustomers','93':'endOfLife','95':'demandNew',
+  '144':'replacement','133':'production','98':'battNew','101':'battFailures','137':'battReplacement',
+  '139':'battProduction','157':'eolVolume','158':'eolToRecycling','183':'eolFrom2ndLife','160':'eolTotal',
+  '180':'install2ndLife','147':'liDemand','161':'liRecovered','259':'liDemandKt','263':'liRecoveredKt',
+  '159':'recycledShare','266':'recycledSharePct','208':'co2PrimaryPerKwh','210':'co2SecondaryPerKwh','242':'co2PrimaryPerKwh',
+  '243':'co2SecondaryPerKwh','205':'lcaPrimary','233':'lcaSecondary','218':'flowP','240':'flowS','255':'flowT'
+};
+/* Modellelement → steuerbarer Parameter */
+const ID2PARAM = PARAMS.reduce((o, p) => (o[p.id] = p, o), {});
+const ID2CONST = CONSTS.reduce((o, c) => (o[c.id] = c, o), {});
+
+const DG = { byId:{}, sectors:{}, scale:1, W:0, H:0, sel:null, ins:{}, outs:{} };
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const centerOf = n => ({ x: n.x + n.w / 2, y: n.y + n.h / 2 });
+
+function edgePoint(n, toward) {
+  const c = centerOf(n);
+  let dx = toward.x - c.x, dy = toward.y - c.y;
+  const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+  if (n.k === 'var') {
+    const rx = n.w / 2 + 2, ry = n.h / 2 + 2;
+    const k = 1 / Math.hypot(dx / rx, dy / ry);
+    return { x: c.x + dx * k, y: c.y + dy * k };
+  }
+  const hw = n.w / 2 + 2, hh = n.h / 2 + 2;
+  const k = Math.min(dx === 0 ? Infinity : hw / Math.abs(dx), dy === 0 ? Infinity : hh / Math.abs(dy));
+  return { x: c.x + dx * k, y: c.y + dy * k };
+}
+
+function wrapLines(txt, maxChars, maxLines) {
+  const words = String(txt).split(/\s+/), lines = [];
+  let cur = '';
+  for (const w of words) {
+    const cand = cur ? cur + ' ' + w : w;
+    if (cand.length <= maxChars || !cur) cur = cand;
+    else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) {
+    const keep = lines.slice(0, maxLines);
+    keep[maxLines - 1] = keep[maxLines - 1].replace(/\s+\S*$/, '') + '…';
+    return keep;
+  }
+  return lines;
+}
+
+function nodeLabelSvg(n) {
+  /* Nutzbare Breite: Ellipsen und Sechsecke verjüngen sich an den Rändern */
+  const avail = n.k === 'var' ? n.w * 0.88 - 12
+              : n.k === 'conv' ? n.w - 48
+              : n.w - 12;
+  /* Schriftgrad so wählen, dass der vollständige Name in die Form passt */
+  let fs = 12.5, lines = null;
+  for (const size of [12.5, 11, 10]) {
+    fs = size;
+    const lh = size * 1.16;
+    const cap = Math.max(1, Math.floor((n.h - 6 - size) / lh) + 1);
+    lines = wrapLines(mName(n.n), Math.max(6, Math.floor(avail / (size * 0.52))), 9);
+    if (lines.length <= cap) break;
+    if (size === 10) lines = wrapLines(mName(n.n), Math.max(6, Math.floor(avail / 5.2)), Math.max(cap, 4));
+  }
+  const c = centerOf(n), lh = fs * 1.16;
+  const y0 = c.y - (lines.length - 1) * lh / 2;
+  return `<text class="sv-label" style="font-size:${fs}px" text-anchor="middle" dominant-baseline="middle">` +
+    lines.map((l, i) => `<tspan x="${c.x.toFixed(1)}" y="${(y0 + i * lh).toFixed(1)}">${esc(l)}</tspan>`).join('') +
+    '</text>';
+}
+
+function hexPath(n) {
+  const k = Math.min(20, n.w * 0.18);
+  const { x, y, w, h } = n;
+  return `M${x + k} ${y}H${x + w - k}L${x + w} ${y + h / 2}L${x + w - k} ${y + h}H${x + k}L${x} ${y + h / 2}Z`;
+}
+function cloudPath(cx, cy) {
+  const r = 13;
+  return `M${cx - 20} ${cy + 5}a${r} ${r} 0 0 1 4 -${r * 1.35} a${r} ${r} 0 0 1 ${r * 1.5} -3 ` +
+         `a${r} ${r} 0 0 1 ${r * 1.5} 3 a${r} ${r} 0 0 1 4 ${r * 1.35} Z`;
+}
+
+function prepDiagram() {
+  /* --- Index --- */
+  DIAGRAM.nodes.forEach(n => DG.byId[n.id] = n);
+  DIAGRAM.flows.forEach(f => DG.byId[f.id] = Object.assign({ k: 'flow' }, f));
+
+  /* Teilmodell-Zuordnung vervollständigen */
+  const secNames = new Set(DIAGRAM.sectors.map(s => s.name));
+  DIAGRAM.nodes.forEach(n => { if (SECTOR_FIX[n.id]) n.s = SECTOR_FIX[n.id]; });
+  DIAGRAM.nodes.forEach(n => {
+    if (secNames.has(n.s)) return;
+    let best = null, bd = Infinity;
+    DIAGRAM.sectors.forEach(s => {
+      const d = Math.hypot(n.x + n.w / 2 - (s.x + s.w / 2), n.y + n.h / 2 - (s.y + s.h / 2));
+      if (d < bd) { bd = d; best = s; }
+    });
+    n.s = best.name;
+  });
+  /* Flüsse erben das Teilmodell ihres Bestands */
+  DIAGRAM.flows.forEach(f => {
+    const ref = DG.byId[f.tgt] || DG.byId[f.src];
+    DG.byId[f.id].s = ref ? ref.s : SECTOR_ORDER[0];
+  });
+
+  /* Teilmodelle vertikal versetzen (Koordinaten innerhalb der Teilmodelle bleiben original) */
+  DIAGRAM.nodes.forEach(n => { n.y += SECTOR_DY[n.s] || 0; });
+  DIAGRAM.flows.forEach(f => {
+    const dy = SECTOR_DY[DG.byId[f.id].s] || 0;
+    if (!dy) return;
+    if (f.sp) f.sp = [f.sp[0], f.sp[1] + dy];
+    if (f.tp) f.tp = [f.tp[0], f.tp[1] + dy];
+  });
+
+  /* --- Sektorrahmen aus den enthaltenen Elementen berechnen --- */
+  const box = {};
+  const add = (name, x, y, w = 0, h = 0) => {
+    const b = box[name] || (box[name] = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 });
+    b.x0 = Math.min(b.x0, x); b.y0 = Math.min(b.y0, y);
+    b.x1 = Math.max(b.x1, x + w); b.y1 = Math.max(b.y1, y + h);
+  };
+  DIAGRAM.nodes.forEach(n => add(n.s, n.x, n.y, n.w, n.h));
+  /* Nur der jeweils freie Flussanfang bzw. -endpunkt ist eine echte Koordinate (Wolke) */
+  DIAGRAM.flows.forEach(f => {
+    const s = DG.byId[f.id].s;
+    if (!DG.byId[f.src] && f.sp) add(s, f.sp[0] - 24, f.sp[1] - 22, 48, 44);
+    if (!DG.byId[f.tgt] && f.tp) add(s, f.tp[0] - 24, f.tp[1] - 22, 48, 44);
+  });
+  const PADL = 22, PADT = 40, PADR = 22, PADB = 22;
+  const rects = {};
+  SECTOR_ORDER.forEach(name => {
+    const b = box[name]; if (!b) return;
+    rects[name] = { x: b.x0 - PADL, y: b.y0 - PADT, w: (b.x1 - b.x0) + PADL + PADR, h: (b.y1 - b.y0) + PADT + PADB };
+  });
+  DG.sectors = rects;
+
+  /* --- Gesamtausdehnung --- */
+  let X0 = 1e9, Y0 = 1e9, X1 = -1e9, Y1 = -1e9;
+  Object.values(rects).forEach(r => {
+    X0 = Math.min(X0, r.x); Y0 = Math.min(Y0, r.y);
+    X1 = Math.max(X1, r.x + r.w); Y1 = Math.max(Y1, r.y + r.h);
+  });
+  const M = 22;
+  X0 -= M; Y0 -= M; X1 += M; Y1 += M;
+  DG.W = X1 - X0; DG.H = Y1 - Y0; DG.X0 = X0; DG.Y0 = Y0;
+
+  /* --- Wirkbeziehungen indexieren --- */
+  DIAGRAM.links.forEach(([s, t]) => {
+    (DG.outs[s] || (DG.outs[s] = [])).push(t);
+    (DG.ins[t] || (DG.ins[t] = [])).push(s);
+  });
+
+}
+
+/** Das SVG in der aktiven Sprache neu aufbauen. */
+function renderDiagram() {
+  const rects = DG.sectors, X0 = DG.X0, Y0 = DG.Y0;
+  /* --- SVG zusammensetzen --- */
+  let svg = `<svg class="dg-root" id="dgSvg" viewBox="${X0} ${Y0} ${DG.W} ${DG.H}" width="${DG.W}" height="${DG.H}"
+    role="img" aria-label="${esc(t('dg.aria'))}" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      #dgSvg .ah-def  { fill: var(--axis); }
+      #dgSvg .ah-in   { fill: var(--accent); }
+      #dgSvg .ah-out  { fill: var(--s2); }
+      #dgSvg .ah-flow { fill: var(--text-muted); }
+      #dgSvg .sv-link { marker-end: url(#ahDef); }
+      #dgSvg .sv-link.hl { marker-end: url(#ahIn); }
+      #dgSvg .sv-link.hl.hl-out { marker-end: url(#ahOut); }
+      #dgSvg .sv-flowarrow { marker-end: url(#ahFlow); }
+    </style>
+    <defs>
+      <marker id="ahDef"  viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ah-def"  d="M0 1.2 L9.4 5 L0 8.8 Z"/></marker>
+      <marker id="ahIn"   viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ah-in"   d="M0 1.2 L9.4 5 L0 8.8 Z"/></marker>
+      <marker id="ahOut"  viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ah-out"  d="M0 1.2 L9.4 5 L0 8.8 Z"/></marker>
+      <marker id="ahFlow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.4" markerHeight="4.4" orient="auto-start-reverse"><path class="ah-flow" d="M0 0.6 L9.6 5 L0 9.4 Z"/></marker>
+    </defs>`;
+
+  /* Teilmodelle */
+  SECTOR_ORDER.forEach(name => {
+    const r = rects[name]; if (!r) return;
+    svg += `<g><rect class="sv-sector" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"/>` +
+           `<text class="sv-sector-label" x="${r.x + 20}" y="${r.y + 28}">${esc(secLabel(name))}</text></g>`;
+  });
+
+  /* Wirkbeziehungen */
+  svg += '<g id="dgLinks">';
+  DIAGRAM.links.forEach(([s, t], i) => {
+    const a = DG.byId[s], b = DG.byId[t];
+    if (!a || !b) return;
+    const ac = a.k === 'flow' ? flowMid(a) : centerOf(a);
+    const bc = b.k === 'flow' ? flowMid(b) : centerOf(b);
+    const dx = bc.x - ac.x, dy = bc.y - ac.y, d = Math.hypot(dx, dy) || 1;
+    const off = Math.min(48, d * 0.17);
+    const cp = { x: (ac.x + bc.x) / 2 - dy / d * off, y: (ac.y + bc.y) / 2 + dx / d * off };
+    const cx = cp.x, cy = cp.y;
+    const p0 = a.k === 'flow' ? shorten(cp, ac, 12) : edgePoint(a, cp);
+    const p1 = b.k === 'flow' ? shorten(cp, bc, 13) : edgePoint(b, cp);
+    svg += `<path class="sv-link" data-lk="${s}|${t}" d="M${p0.x.toFixed(1)} ${p0.y.toFixed(1)}` +
+           `Q${cx.toFixed(1)} ${cy.toFixed(1)} ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}"/>`;
+  });
+  svg += '</g>';
+
+  /* Flüsse */
+  svg += '<g id="dgFlows">';
+  DIAGRAM.flows.forEach(f => {
+    const g = flowGeom(f);
+    svg += `<g class="sv-node" data-id="${f.id}" tabindex="0" role="button" aria-label="${esc(kindLabel('flow'))} ${esc(mName(f.n))}">`;
+    if (g.cloud) svg += `<path class="sv-cloud" d="${cloudPath(g.cloud.x, g.cloud.y)}"/>`;
+    svg += `<path class="sv-flow sv-flowarrow" d="M${g.a.x.toFixed(1)} ${g.a.y.toFixed(1)}L${g.b.x.toFixed(1)} ${g.b.y.toFixed(1)}"/>`;
+    svg += `<path class="sv-flowline" d="M${g.a.x.toFixed(1)} ${g.a.y.toFixed(1)}L${g.b.x.toFixed(1)} ${g.b.y.toFixed(1)}"/>`;
+    svg += `<circle class="sv-valve" cx="${g.m.x.toFixed(1)}" cy="${g.m.y.toFixed(1)}" r="8"/>`;
+    /* Flussbezeichnung — bei senkrechten Flüssen auf die freie Seite setzen */
+    const horiz = Math.abs(g.b.x - g.a.x) >= Math.abs(g.b.y - g.a.y);
+    const lh = 14;
+    if (horiz) {
+      const lines = wrapLines(mName(f.n), 30, 3);
+      const y0 = g.m.y + 24;
+      svg += `<text class="sv-flowlabel" text-anchor="middle">` +
+        lines.map((l, i) => `<tspan x="${g.m.x.toFixed(1)}" y="${y0 + i * lh}">${esc(l)}</tspan>`).join('') + '</text>';
+    } else {
+      const lines = wrapLines(mName(f.n), 18, 4);
+      const tw = Math.max(...lines.map(l => l.length)) * 6.1;
+      const y0 = g.m.y - (lines.length - 1) * lh / 2;
+      const bb = side => ({
+        x0: side > 0 ? g.m.x + 14 : g.m.x - 14 - tw,
+        x1: side > 0 ? g.m.x + 14 + tw : g.m.x - 14,
+        y0: y0 - 10, y1: y0 + (lines.length - 1) * lh + 6
+      });
+      /* Seite mit der geringsten Überdeckung wählen */
+      const clash = b => DIAGRAM.nodes.reduce((sum, n) => {
+        const ox = Math.min(b.x1, n.x + n.w) - Math.max(b.x0, n.x);
+        const oy = Math.min(b.y1, n.y + n.h) - Math.max(b.y0, n.y);
+        return sum + (ox > 0 && oy > 0 ? ox * oy : 0);
+      }, 0);
+      const side = clash(bb(-1)) < clash(bb(1)) ? -1 : 1;
+      svg += `<text class="sv-flowlabel" text-anchor="${side > 0 ? 'start' : 'end'}">` +
+        lines.map((l, i) => `<tspan x="${(g.m.x + side * 14).toFixed(1)}" y="${(y0 + i * lh).toFixed(1)}">${esc(l)}</tspan>`).join('') + '</text>';
+    }
+    svg += '</g>';
+  });
+  svg += '</g>';
+
+  /* Elemente */
+  svg += '<g id="dgNodes">';
+  DIAGRAM.nodes.forEach(n => {
+    svg += `<g class="sv-node" data-id="${n.id}" tabindex="0" role="button" aria-label="${esc(kindLabel(n.k))} ${esc(mName(n.n))}">`;
+    if (n.k === 'stock')      svg += `<rect class="sv-stock" x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="5"/>`;
+    else if (n.k === 'var')   svg += `<ellipse class="sv-var" cx="${n.x + n.w / 2}" cy="${n.y + n.h / 2}" rx="${n.w / 2}" ry="${n.h / 2}"/>`;
+    else                      svg += `<path class="sv-conv" d="${hexPath(n)}"/>`;
+    svg += nodeLabelSvg(n) + '</g>';
+  });
+  svg += '</g></svg>';
+
+  const host = document.getElementById('dgScroll');
+  host.innerHTML = svg;
+  DG.svg = document.getElementById('dgSvg');
+
+  /* Interaktion */
+  DG.svg.addEventListener('click', e => {
+    const g = e.target.closest('.sv-node');
+    select(g ? g.dataset.id : null);
+  });
+  DG.svg.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const g = e.target.closest('.sv-node');
+    if (g) { e.preventDefault(); select(g.dataset.id); }
+  });
+
+  /* Zoom & Pan — nur einmal verdrahten, das SVG wird bei Sprachwechsel ersetzt */
+  if (DG.wired) { zoom(DG.scale); return; }
+  DG.wired = true;
+  const scroll = host;
+  let drag = null;
+  scroll.addEventListener('pointerdown', e => {
+    if (e.target.closest('.sv-node')) return;
+    drag = { x: e.clientX, y: e.clientY, sl: scroll.scrollLeft, st: scroll.scrollTop };
+    scroll.classList.add('grabbing');
+    scroll.setPointerCapture(e.pointerId);
+  });
+  scroll.addEventListener('pointermove', e => {
+    if (!drag) return;
+    scroll.scrollLeft = drag.sl - (e.clientX - drag.x);
+    scroll.scrollTop = drag.st - (e.clientY - drag.y);
+  });
+  const endDrag = () => { drag = null; scroll.classList.remove('grabbing'); };
+  scroll.addEventListener('pointerup', endDrag);
+  scroll.addEventListener('pointercancel', endDrag);
+  scroll.addEventListener('wheel', e => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    zoom(DG.scale * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+  }, { passive: false });
+
+  document.getElementById('dgZoomIn').addEventListener('click', () => zoom(DG.scale * 1.2));
+  document.getElementById('dgZoomOut').addEventListener('click', () => zoom(DG.scale / 1.2));
+  document.getElementById('dgFit').addEventListener('click', fitDiagram);
+  fitDiagram();
+}
+
+function flowGeom(f) {
+  const s = DG.byId[f.src], t = DG.byId[f.tgt];
+  const rawA = s ? centerOf(s) : { x: f.sp[0], y: f.sp[1] };
+  const rawB = t ? centerOf(t) : { x: f.tp[0], y: f.tp[1] };
+  let a = s ? edgePoint(s, rawB) : rawA;
+  let b = t ? edgePoint(t, rawA) : rawB;
+  const cloud = !s ? rawA : (!t ? rawB : null);
+  if (!s) a = shorten(rawB, a, 21);
+  if (!t) b = shorten(rawA, b, 21);
+  return { a, b, m: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, cloud };
+}
+function flowMid(f) { return flowGeom(f).m; }
+/** Punkt p um d Einheiten in Richtung from zurücknehmen. */
+function shorten(from, p, d) {
+  const dx = p.x - from.x, dy = p.y - from.y, L = Math.hypot(dx, dy) || 1;
+  return { x: p.x - dx / L * d, y: p.y - dy / L * d };
+}
+
+function zoom(s) {
+  DG.scale = Math.max(0.25, Math.min(2.2, s));
+  DG.svg.setAttribute('width', DG.W * DG.scale);
+  DG.svg.setAttribute('height', DG.H * DG.scale);
+}
+function fitDiagram() {
+  const host = document.getElementById('dgScroll');
+  zoom(Math.min(1.1, (host.clientWidth - 4) / DG.W));
+}
+
+function select(id) {
+  DG.sel = (id && DG.sel !== id) ? id : null;
+  const root = DG.svg;
+  root.classList.toggle('dim', !!DG.sel);
+  root.querySelectorAll('.sv-node').forEach(g => g.classList.remove('hl', 'hl-2'));
+  root.querySelectorAll('.sv-link').forEach(p => p.classList.remove('hl', 'hl-out'));
+  if (DG.sel) {
+    const g = root.querySelector(`.sv-node[data-id="${DG.sel}"]`);
+    if (g) { g.classList.add('hl'); g.parentNode.appendChild(g); }
+    (DG.ins[DG.sel] || []).forEach(s => {
+      const p = root.querySelector(`.sv-link[data-lk="${s}|${DG.sel}"]`);
+      if (p) p.classList.add('hl');
+      const n = root.querySelector(`.sv-node[data-id="${s}"]`);
+      if (n) n.classList.add('hl-2');
+    });
+    (DG.outs[DG.sel] || []).forEach(t => {
+      const p = root.querySelector(`.sv-link[data-lk="${DG.sel}|${t}"]`);
+      if (p) p.classList.add('hl', 'hl-out');
+      const n = root.querySelector(`.sv-node[data-id="${t}"]`);
+      if (n) n.classList.add('hl-2');
+    });
+  }
+  renderInfo();
+}
+
+function renderInfo() {
+  const host = document.getElementById('dgInfo');
+  if (!DG.sel) {
+    host.innerHTML = `<div class="i-kind">${esc(t('info.kind'))}</div>
+      <div class="i-name">${esc(t('info.name'))}</div>
+      <p class="i-hint">${esc(t('info.hint'))}</p>`;
+    return;
+  }
+  const n = DG.byId[DG.sel];
+  const key = ID2KEY[DG.sel];
+  const par = ID2PARAM[DG.sel] || ID2CONST[DG.sel];
+  let eq = mEq(n.eq) || '—';
+  if (n.k === 'stock') eq = t('info.start') + eq;
+  if (n.k === 'conv') eq = t('info.points') + eq;
+  if (par && state.p[par.key] !== undefined) eq = fmt(state.p[par.key], par.dp) + '   ' + t('info.slider');
+  else if (par && state.c[par.key] !== undefined) eq = String(state.c[par.key]);
+
+  let val = '';
+  if (key && RES) {
+    const a = RES[key];
+    val = `<div class="i-unit">${esc(t('info.value2050'))}<b style="color:var(--text-primary)">` +
+          `${fmtCompact(a[a.length - 1], OUT[key][2])} ${esc(tv(OUT[key][1]))}</b></div>`;
+  }
+  const nm = ids => (ids || []).map(i => DG.byId[i] ? esc(mName(DG.byId[i].n)) : '').filter(Boolean);
+  const ins = nm(DG.ins[DG.sel]), outs = nm(DG.outs[DG.sel]);
+  host.innerHTML =
+    `<div class="i-kind">${esc(kindLabel(n.k))} · ${esc(secLabel(n.s || ''))}</div>
+     <div class="i-name">${esc(mName(n.n))}</div>
+     <div class="i-eq">${esc(eq)}</div>
+     ${n.u ? `<div class="i-unit">${esc(t('info.unit'))}${esc(mUnit(n.u))}</div>` : ''}
+     ${val}
+     ${ins.length ? `<div class="i-unit">${esc(t('info.in'))}${ins.join(', ')}</div>` : ''}
+     ${outs.length ? `<div class="i-unit">${esc(t('info.out'))}${outs.join(', ')}</div>` : ''}`;
+}
+function updateDiagramValues() { if (DG.sel) renderInfo(); }
+
+/* ------------------------------------------------------------------
+   10 · Dokumentation
+   ------------------------------------------------------------------ */
+function buildDocs() {
+  /* — Gleichungen — */
+  const groups = {};
+  const all = DIAGRAM.nodes.concat(DIAGRAM.flows.map(f => Object.assign({ k:'flow' }, f, { s: DG.byId[f.id].s })));
+  all.forEach(n => (groups[n.s] || (groups[n.s] = [])).push(n));
+  const rank = { stock:0, flow:1, conv:2, var:3 };
+  let html = `<table class="eq"><thead><tr><th>${t('doc.thType')}</th><th>${t('doc.thElement')}</th>` +
+             `<th>${t('doc.thEquation')}</th><th>${t('doc.thUnit')}</th></tr></thead><tbody>`;
+  SECTOR_ORDER.forEach(sec => {
+    const list = (groups[sec] || []).slice().sort((a, b) =>
+      (rank[a.k] - rank[b.k]) || mName(a.n).localeCompare(mName(b.n), LOCALE()));
+    if (!list.length) return;
+    html += `<tr><td colspan="4" style="background:var(--surface-2);font-weight:600;font-size:12px;` +
+            `letter-spacing:.04em;text-transform:uppercase;color:var(--text-secondary)">${esc(secLabel(sec))}</td></tr>`;
+    list.forEach(n => {
+      let eq = mEq(n.eq) || '—';
+      if (n.k === 'stock') eq = t('doc.startVal') + eq;
+      if (n.k === 'conv') eq = t('doc.convDesc') + eq;
+      html += `<tr><td><span class="pill ${n.k === 'stock' ? 'stock' : n.k === 'flow' ? 'flow' : n.k === 'conv' ? 'conv' : ''}">` +
+              `${esc(kindLabel(n.k))}</span></td><td class="nm">${esc(mName(n.n))}</td>` +
+              `<td class="fx">${esc(eq)}</td><td class="un">${esc(mUnit(n.u) || '—')}</td></tr>`;
+    });
+  });
+  document.getElementById('pane-eq').innerHTML = html + '</tbody></table>';
+
+  /* — Parameter — */
+  let ph = `<table class="eq"><thead><tr><th>${t('doc.thParam')}</th><th>${t('doc.thCurrent')}</th>` +
+           `<th>${t('doc.thBase')}</th><th>${t('doc.thRange')}</th><th>${t('doc.thUnit')}</th></tr></thead><tbody>` +
+           `<tr><td colspan="5" style="background:var(--surface-2);font-weight:600;font-size:12px;letter-spacing:.04em;` +
+           `text-transform:uppercase;color:var(--text-secondary)">${t('doc.grpParams')}</td></tr>`;
+  PARAMS.forEach(p => {
+    ph += `<tr><td class="nm">${esc(tv(p.label))}</td>` +
+          `<td id="pv-${p.key}" style="font-variant-numeric:tabular-nums;font-weight:600"></td>` +
+          `<td class="un">${p.pct ? fmt(BASE.p[p.key] * 100, 0) + ' %' : fmt(BASE.p[p.key], p.dp)}</td>` +
+          `<td class="un">${p.pct ? fmt(p.min * 100, 0) + '–' + fmt(p.max * 100, 0) + ' %' : fmt(p.min, p.dp) + '–' + fmt(p.max, p.dp)}</td>` +
+          `<td class="un">${esc(tv(p.unit))}</td></tr>`;
+  });
+  ph += `<tr><td colspan="5" style="background:var(--surface-2);font-weight:600;font-size:12px;letter-spacing:.04em;` +
+        `text-transform:uppercase;color:var(--text-secondary)">${t('doc.grpConsts')}</td></tr>`;
+  /* Konstanten exakt und unverkürzt ausgeben */
+  const exact = (v, key) => new Intl.NumberFormat(LOCALE(),
+    { maximumSignificantDigits: 12, useGrouping: key !== 'marketLaunch' }).format(v);
+  CONSTS.forEach(c => {
+    ph += `<tr><td class="nm">${esc(tv(c.label))}</td>` +
+          `<td style="font-variant-numeric:tabular-nums;font-weight:600" colspan="3">${esc(exact(c.value, c.key))}</td>` +
+          `<td class="un">${esc(tv(c.unit))}</td></tr>`;
+  });
+  ph += `<tr><td colspan="5" style="background:var(--surface-2);font-weight:600;font-size:12px;letter-spacing:.04em;` +
+        `text-transform:uppercase;color:var(--text-secondary)">${t('doc.grpScenarios')}</td></tr>`;
+  SCENARIOS.forEach(s => {
+    ph += `<tr><td class="nm">${esc(tv(s.name))}</td><td class="fx" colspan="4">` +
+          PARAMS.map(p => `${tv(p.label)} = ${p.pct ? fmt(s.p[p.key] * 100, 0) + ' %' : fmt(s.p[p.key], p.dp)}`).join(' · ') +
+          `</td></tr>`;
+  });
+  document.getElementById('pane-par').innerHTML = ph + '</tbody></table>';
+
+  /* — Zeitreihen — */
+  let th = `<div class="prose"><h4>${t('doc.tsHead')}</h4><p>${t('doc.tsIntro')}</p></div>`;
+  [['co2Primary', 'doc.ts1', 'Ginster et al. (2024)'],
+   ['co2Secondary', 'doc.ts2', 'Ginster et al. (2024)'],
+   ['fleetActual', 'doc.ts3', 'European Alternative Fuels Observatory']]
+  .forEach(([k, titleKey, src]) => {
+    const s = SERIES_DATA[k];
+    th += `<div style="padding:0 22px 18px"><h4 style="font-size:13.5px;margin:0 0 3px">${esc(t(titleKey))}</h4>` +
+          `<p style="font-size:12px;color:var(--text-muted);margin:0 0 8px">${esc(tv(s.unit))} · ${esc(t('doc.source'))}${esc(src)}</p>` +
+          `<div style="overflow:auto;border:1px solid var(--border);border-radius:8px"><table class="dt"><thead><tr>` +
+          s.pts.map(p => `<th>${p[0]}</th>`).join('') + '</tr></thead><tbody><tr>' +
+          s.pts.map(p => `<td>${fmt(p[1], 0)}</td>`).join('') + '</tr></tbody></table></div></div>';
+  });
+  document.getElementById('pane-ts').innerHTML = th;
+
+  /* Reiter — nur einmal verdrahten */
+  if (!buildDocs.tabsWired) {
+    buildDocs.tabsWired = true;
+    const tabs = Array.from(document.querySelectorAll('.doc-tabs button'));
+    tabs.forEach(b => b.addEventListener('click', () => {
+      tabs.forEach(o => o.setAttribute('aria-selected', String(o === b)));
+      document.querySelectorAll('.doc-pane').forEach(p =>
+        p.classList.toggle('on', p.id === b.getAttribute('aria-controls')));
+    }));
+  }
+  updateDocValues();
+}
+function updateDocValues() {
+  PARAMS.forEach(p => {
+    const el = document.getElementById('pv-' + p.key);
+    if (el) el.textContent = p.pct ? fmt(state.p[p.key] * 100, 0) + ' %' : fmt(state.p[p.key], p.dp);
+  });
+}
+
+/* ------------------------------------------------------------------
+   11 · Farbschema, Ereignisse, Start
+   ------------------------------------------------------------------ */
+function prefersDark() {
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function currentTheme() {
+  return document.documentElement.dataset.theme || (prefersDark() ? 'dark' : 'light');
+}
+function themeLabel() {
+  return currentTheme() === 'dark' ? t('theme.light') : t('theme.dark');
+}
+function applyTheme(th) {
+  document.documentElement.dataset.theme = th;
+  document.getElementById('themeLabel').textContent = themeLabel();
+  try { localStorage.setItem('bm-theme', th); } catch (e) {}
+  requestAnimationFrame(() => {
+    charts.forEach(ch => ch.draw());
+    KPIS.forEach(k => drawSpark(k._cv, RES[k.k]));
+  });
+}
+
+/* ---- Sprache ---- */
+/** Statische Texte der Seite in der aktiven Sprache setzen. */
+function applyStaticText() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.innerHTML = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAria));
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.setAttribute('title', t(el.dataset.i18nTitle));
+  });
+  document.getElementById('langLabel').textContent = t('lang.other');
+  document.getElementById('themeLabel').textContent = themeLabel();
+}
+/** Alle sprachabhängigen Oberflächenteile neu aufbauen. */
+function buildUI() {
+  applyStaticText();
+  buildScenarios();
+  buildSliders();
+  buildAdvanced();
+  buildKpis();
+  buildCharts();
+  renderDiagram();
+  renderInfo();
+  buildDocs();
+  refresh();
+}
+function setLang(lang) {
+  if (lang === LANG) return;
+  LANG = lang;
+  try { localStorage.setItem('bm-lang', lang); } catch (e) {}
+  const sel = DG.sel;
+  DG.sel = null;
+  buildUI();
+  if (sel) select(sel);
+}
+
+function init() {
+  try {
+    const savedTheme = localStorage.getItem('bm-theme');
+    if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+    const savedLang = localStorage.getItem('bm-lang');
+    if (savedLang === 'de' || savedLang === 'en') LANG = savedLang;
+  } catch (e) {}
+  document.getElementById('themeBtn').addEventListener('click', () =>
+    applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
+  document.getElementById('langBtn').addEventListener('click', () =>
+    setLang(LANG === 'de' ? 'en' : 'de'));
+
+  recompute();
+  prepDiagram();
+  buildUI();
+
+  document.getElementById('refToggle').addEventListener('change', e => {
+    state.showRef = e.target.checked;
+    charts.forEach(ch => { ch.buildLegend(); ch.draw(); if (ch.showTable) ch.renderTable(); });
+  });
+  document.getElementById('realToggle').addEventListener('change', e => {
+    state.showReal = e.target.checked;
+    charts.forEach(ch => { ch.buildLegend(); ch.draw(); if (ch.showTable) ch.renderTable(); });
+  });
+  document.getElementById('csvBtn').addEventListener('click', exportCSV);
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    state.p = Object.assign({}, BASE.p);
+    state.scenario = 0;
+    syncScenarioChips(); syncSliders(); refresh();
+  });
+
+  /* Größenänderungen */
+  let rt;
+  const onResize = () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => {
+      charts.forEach(ch => ch.draw());
+      KPIS.forEach(k => drawSpark(k._cv, RES[k.k]));
+    }, 90);
+  };
+  window.addEventListener('resize', onResize);
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(onResize);
+    ro.observe(document.getElementById('chartGrid'));
+  }
+  /* Systemfarbschema folgen, solange keine Wahl getroffen wurde */
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+      if (!document.documentElement.dataset.theme) {
+        document.getElementById('themeLabel').textContent = themeLabel();
+        charts.forEach(ch => ch.draw());
+        KPIS.forEach(k => drawSpark(k._cv, RES[k.k]));
+      }
+    });
+  }
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
+</script>
+</body>
+</html>
