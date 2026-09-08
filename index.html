@@ -782,10 +782,10 @@ en: {
     vehicle lifetime and, where 2nd-life use occurs, additionally by the lifetime of the second
     application.
   </div>
-  <h4>System boundary of the greenhouse gas balance (cradle-to-gate)</h4>
+  <h4>System boundary of the greenhouse gas emissions (cradle-to-gate)</h4>
   <p>
-    The balance is drawn cradle-to-gate: it covers the upstream chains of the battery materials
-    and battery production up to the factory gate of the finished battery. The use phase of the
+    Emissions are accounted for cradle-to-gate: they cover the upstream chains of the battery
+    materials and battery production up to the factory gate of the finished battery. The use phase of the
     vehicles, the electricity for charging, transport after production and the recycling processes
     themselves carry no emissions in the model. The cumulative curve therefore shows the
     cradle-to-gate emissions of all batteries produced since 2000.
@@ -835,7 +835,7 @@ de: {
   'theme.toggle':'Farbschema wechseln', 'theme.dark':'Dunkel', 'theme.light':'Hell',
   'hero.eyebrow':'Simulationsmodell',
   'hero.head':'Wie viel CO<sub>2</sub> spart die Kreislaufführung von Batterien?',
-  'hero.lede':'Ein vereinfachtes systemdynamisches Modell der zirkulären Batterieproduktion: Es verbindet die Marktdiffusion batterieelektrischer Fahrzeuge mit dem daraus resultierenden Batterie- und Lithiumbedarf, der Rückgewinnung aus Altbatterien, der Weiternutzung in 2nd-Life-Anwendungen und der resultierenden Treibhausgasbilanz der Batterieproduktion.',
+  'hero.lede':'Ein vereinfachtes systemdynamisches Modell der zirkulären Batterieproduktion: Es verbindet die Marktdiffusion batterieelektrischer Fahrzeuge mit dem daraus resultierenden Batterie- und Lithiumbedarf, der Rückgewinnung aus Altbatterien, der Weiternutzung in 2nd-Life-Anwendungen und den resultierenden Treibhausgasemissionen der Batterieproduktion.',
   'hero.tag1':'7 Bestände · 8 Flüsse · 41 Variablen',
   'hero.tag2':'Zeitraum 2000–2050',
   'hero.tag3':'Euler-Integration, Δt = 0,125 a',
@@ -916,10 +916,10 @@ de: {
     zeitversetzt um die Fahrzeuglebensdauer und, bei 2nd-Life-Nutzung, zusätzlich um die
     Lebensdauer der Zweitanwendung.
   </div>
-  <h4>Systemgrenze der Treibhausgasbilanz (cradle-to-gate)</h4>
+  <h4>Systemgrenze der Treibhausgasemissionen (cradle-to-gate)</h4>
   <p>
-    Bilanziert wird cradle-to-gate: erfasst sind die Vorketten der Batteriematerialien und die
-    Batterieproduktion bis zum Werkstor der fertigen Batterie. Die Nutzungsphase der Fahrzeuge,
+    Die Emissionen werden cradle-to-gate erfasst: enthalten sind die Vorketten der
+    Batteriematerialien und die Batterieproduktion bis zum Werkstor der fertigen Batterie. Die Nutzungsphase der Fahrzeuge,
     der Ladestrom, Transporte nach der Produktion sowie die Recyclingprozesse selbst tragen im
     Modell keine Emissionen. Die kumulierte Kurve zeigt somit die cradle-to-gate-Emissionen
     aller seit 2000 produzierten Batterien.
@@ -1402,8 +1402,8 @@ const CHARTS = [
                            en:'Cumulative greenhouse gas emissions (cradle-to-gate)'},
     unit:{de:'Mt CO₂e seit 2000 · cradle-to-gate', en:'Mt CO₂e since 2000 · cradle-to-gate'},
     wide:true, tall:true,
-    note:{de:'Kumulierte Bilanz der Batterieproduktion von der Rohstoffgewinnung bis zum Werkstor (cradle-to-gate) — die maßgebliche Größe für die Bewertung der Kreislaufführung.',
-          en:'Cumulative balance of battery production from raw material extraction to the factory gate (cradle-to-gate) — the decisive figure for assessing circularity.'},
+    note:{de:'Kumulierte Emissionen der Batterieproduktion von der Rohstoffgewinnung bis zum Werkstor (cradle-to-gate) — die maßgebliche Größe für die Bewertung der Kreislaufführung.',
+          en:'Cumulative emissions of battery production from raw material extraction to the factory gate (cradle-to-gate) — the decisive figure for assessing circularity.'},
     series:[ {k:'CO2t', label:{de:'Gesamt', en:'Total'}, c:'--s4', w:2.5},
              {k:'CO2p', label:{de:'aus Primärmaterial', en:'from primary material'}, c:'--s1'},
              {k:'CO2s', label:{de:'aus Sekundärmaterial', en:'from secondary material'}, c:'--s3'} ] }
