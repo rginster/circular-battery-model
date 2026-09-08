@@ -43,3 +43,19 @@ comparison with empirical fleet data were added.
 Research Training Group CircularLIB, funded by the Ministry for Science and Culture of
 Lower Saxony from the zukunft.niedersachsen programme of the Volkswagen Foundation
 (grant number MWK|ZN3678).
+
+## License
+
+[![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
+
+© 2026 Raphael Ginster. This work is licensed under a
+[Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/)
+(CC BY 4.0). You are free to share and adapt the material for any purpose, including
+commercially, as long as you give appropriate credit, provide a link to the license and
+indicate if changes were made. The full legal code is in [`LICENSE`](LICENSE).
+
+When using or adapting the model, please cite the underlying publication:
+
+> Ginster, R., Blömeke, S., Popien, J. L., Scheller, C., Cerdas, F., Herrmann, C., &
+> Spengler, T. S. (2024). Circular battery production in the EU. *Journal of Industrial
+> Ecology*, 28, 1165–1182. doi:10.1111/jiec.13527
