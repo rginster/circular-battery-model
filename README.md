@@ -6,7 +6,7 @@ resulting battery and lithium demand, the recovery of material from end-of-life 
 their continued use in 2nd-life applications, and the resulting greenhouse gas emissions
 (cradle-to-gate) of battery production.
 
-**Live version:** _(GitHub Pages URL — add once Pages is enabled)_
+**Live version:** <https://rginster.github.io/circular-battery-model/>
 
 ## Contents
 
