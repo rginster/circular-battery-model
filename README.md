@@ -3,7 +3,7 @@
 An interactive, self-contained system dynamics model of circular battery production,
 covering 2000–2050. It links the market diffusion of battery electric vehicles with the
 resulting battery and lithium demand, the recovery of material from end-of-life batteries,
-their continued use in 2nd-life applications, and the resulting greenhouse gas balance
+their continued use in 2nd-life applications, and the resulting greenhouse gas emissions
 (cradle-to-gate) of battery production.
 
 **Live version:** _(GitHub Pages URL — add once Pages is enabled)_
